@@ -182,6 +182,24 @@ impl<T> NumericalMultiset<T> {
     }
 }
 
+impl<T: Copy> NumericalMultiset<T> {
+    /// Iterator over all distinct values in the multiset, without their
+    /// multiplicities. Output is sorted by ascending value.
+    #[must_use = "Only effect is to produce a result"]
+    pub fn values(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = T> + ExactSizeIterator + FusedIterator + Clone {
+        self.value_to_multiplicity.keys().copied()
+    }
+
+    /// Iterator over all distinct values in the multiset, along with their
+    /// multiplicities. Output is sorted by ascending value.
+    #[must_use = "Only effect is to produce a result"]
+    pub fn iter(&self) -> Iter<'_, T> {
+        self.into_iter()
+    }
+}
+
 impl<T: Ord> NumericalMultiset<T> {
     /// Query the number of occurences of a value inside of the multiset
     #[inline]
@@ -704,22 +722,6 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         self.value_to_multiplicity.retain(|&k, &mut v| f(k, v));
         self.reset_len();
     }
-
-    /// Iterator over all distinct values in the multiset, without their
-    /// multiplicities. Output is sorted by ascending value.
-    #[must_use = "Only effect is to produce a result"]
-    pub fn values(
-        &self,
-    ) -> impl DoubleEndedIterator<Item = T> + ExactSizeIterator + FusedIterator + Clone {
-        self.value_to_multiplicity.keys().copied()
-    }
-
-    /// Iterator over all distinct values in the multiset, along with their
-    /// multiplicities. Output is sorted by ascending value.
-    #[must_use = "Only effect is to produce a result"]
-    pub fn iter(&self) -> Iter<'_, T> {
-        self.into_iter()
-    }
 }
 
 impl<T: Copy + Ord> BitAnd<&NumericalMultiset<T>> for &NumericalMultiset<T> {
@@ -752,7 +754,7 @@ impl<T: Copy + Ord> BitXor<&NumericalMultiset<T>> for &NumericalMultiset<T> {
     }
 }
 
-impl<T: Copy + Ord> Extend<T> for NumericalMultiset<T> {
+impl<T: Ord> Extend<T> for NumericalMultiset<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for element in iter {
             self.insert(element);
@@ -760,7 +762,7 @@ impl<T: Copy + Ord> Extend<T> for NumericalMultiset<T> {
     }
 }
 
-impl<T: Copy + Ord> Extend<(T, NonZeroUsize)> for NumericalMultiset<T> {
+impl<T: Ord> Extend<(T, NonZeroUsize)> for NumericalMultiset<T> {
     /// More efficient alternative to [`Extend<T>`] for cases where you know in
     /// advance that you are going to insert several copies of a value
     fn extend<I: IntoIterator<Item = (T, NonZeroUsize)>>(&mut self, iter: I) {
@@ -770,7 +772,7 @@ impl<T: Copy + Ord> Extend<(T, NonZeroUsize)> for NumericalMultiset<T> {
     }
 }
 
-impl<T: Copy + Ord> FromIterator<T> for NumericalMultiset<T> {
+impl<T: Ord> FromIterator<T> for NumericalMultiset<T> {
     #[must_use = "Only effect is to produce a result"]
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut result = Self::new();
@@ -779,7 +781,7 @@ impl<T: Copy + Ord> FromIterator<T> for NumericalMultiset<T> {
     }
 }
 
-impl<T: Copy + Ord> FromIterator<(T, NonZeroUsize)> for NumericalMultiset<T> {
+impl<T: Ord> FromIterator<(T, NonZeroUsize)> for NumericalMultiset<T> {
     /// More efficient alternative to [`FromIterator<T>`] for cases where you
     /// know in advance that you are going to insert several copies of a value
     #[must_use = "Only effect is to produce a result"]
@@ -796,7 +798,7 @@ impl<T: Hash> Hash for NumericalMultiset<T> {
     }
 }
 
-impl<'a, T: Copy + Ord> IntoIterator for &'a NumericalMultiset<T> {
+impl<'a, T: Copy> IntoIterator for &'a NumericalMultiset<T> {
     type Item = (T, NonZeroUsize);
     type IntoIter = Iter<'a, T>;
 
@@ -811,9 +813,9 @@ impl<'a, T: Copy + Ord> IntoIterator for &'a NumericalMultiset<T> {
 /// This `struct` is created by the [`iter()`](NumericalMultiset::iter) method on
 /// [`NumericalMultiset`]. See its documentation for more.
 #[derive(Clone, Debug, Default)]
-pub struct Iter<'a, T: Copy + Ord>(btree_map::Iter<'a, T, NonZeroUsize>);
+pub struct Iter<'a, T: Copy>(btree_map::Iter<'a, T, NonZeroUsize>);
 //
-impl<T: Copy + Ord> DoubleEndedIterator for Iter<'_, T> {
+impl<T: Copy> DoubleEndedIterator for Iter<'_, T> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         self.0.next_back().map(|(&k, &v)| (k, v))
@@ -825,16 +827,16 @@ impl<T: Copy + Ord> DoubleEndedIterator for Iter<'_, T> {
     }
 }
 //
-impl<T: Copy + Ord> ExactSizeIterator for Iter<'_, T> {
+impl<T: Copy> ExactSizeIterator for Iter<'_, T> {
     #[must_use = "Only effect is to produce a result"]
     fn len(&self) -> usize {
         self.0.len()
     }
 }
 //
-impl<T: Copy + Ord> FusedIterator for Iter<'_, T> {}
+impl<T: Copy> FusedIterator for Iter<'_, T> {}
 //
-impl<T: Copy + Ord> Iterator for Iter<'_, T> {
+impl<T: Copy> Iterator for Iter<'_, T> {
     type Item = (T, NonZeroUsize);
 
     #[inline]
@@ -875,7 +877,7 @@ impl<T: Copy + Ord> Iterator for Iter<'_, T> {
     }
 }
 
-impl<T: Copy + Ord> IntoIterator for NumericalMultiset<T> {
+impl<T> IntoIterator for NumericalMultiset<T> {
     type Item = (T, NonZeroUsize);
     type IntoIter = IntoIter<T>;
 
@@ -893,9 +895,9 @@ impl<T: Copy + Ord> IntoIterator for NumericalMultiset<T> {
 /// on [`NumericalMultiset`] (provided by the [`IntoIterator`] trait). See its
 /// documentation for more.
 #[derive(Debug, Default)]
-pub struct IntoIter<T: Copy + Ord>(btree_map::IntoIter<T, NonZeroUsize>);
+pub struct IntoIter<T>(btree_map::IntoIter<T, NonZeroUsize>);
 //
-impl<T: Copy + Ord> DoubleEndedIterator for IntoIter<T> {
+impl<T> DoubleEndedIterator for IntoIter<T> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         self.0.next_back()
@@ -907,16 +909,16 @@ impl<T: Copy + Ord> DoubleEndedIterator for IntoIter<T> {
     }
 }
 //
-impl<T: Copy + Ord> ExactSizeIterator for IntoIter<T> {
+impl<T> ExactSizeIterator for IntoIter<T> {
     #[must_use = "Only effect is to produce a result"]
     fn len(&self) -> usize {
         self.0.len()
     }
 }
 //
-impl<T: Copy + Ord> FusedIterator for IntoIter<T> {}
+impl<T> FusedIterator for IntoIter<T> {}
 //
-impl<T: Copy + Ord> Iterator for IntoIter<T> {
+impl<T> Iterator for IntoIter<T> {
     type Item = (T, NonZeroUsize);
 
     #[inline]
