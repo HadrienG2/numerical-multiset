@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "ordered-multiset"
+name = "numerical-multiset"
 version = "0.1.0"

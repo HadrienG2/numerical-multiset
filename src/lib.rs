@@ -1,30 +1,52 @@
-//! An ordered multiset implementation for Copy types
+//! An ordered multiset implementation for primitive number types based on
+//! sparse histograms.
 //!
-//! This crate implements a multiset, which is a generalization of the notion of
-//! mathematical set where multiple copies of a value can be present, and the
-//! multiset will track how many copies of each value there are.
+//! This crate implements a kind of multiset, which is a generalization of the
+//! notion of mathematical set where multiple values that are equal to each
+//! other can be present simulatneously.
 //!
-//! Unlike other multisets in the crates.io ecosystem, this multiset is also
-//! ordered, which means that one can cheaply do things like get a sorted list
-//! of values or determine which value within the multiset is the largest or
-//! smallest one.
+//! Our multiset implementation differs from the most popular multiset
+//! implementations of crates.io at the time of its release in the following
+//! respects:
 //!
-//! This ordering does not come for free: compared to the typical hash-based
-//! approach, most operations have `O(log(N))` complexity in the size of the
-//! dataset instead of being (amortized) constant-time as usual. Howver,
-//! ordering and fast min/max queries can useful in some applications, such as
-//! median filtering of streaming numerical data for which the histogram
-//! algorithm is not available or not practical (floats, integers of width >= 32
-//! bits...).
+//! - It is ordered, which means that order-based queries such as getting a
+//!   sorted list of elements or finding the minimum and maximum elements are
+//!   relatively cheap. For example, the complexity of a min/max query grows
+//!   logarithmically with the number of distinct values in the multiset.
+//!     * The price to pay for this feature is that classic set operations like
+//!       inserting/removing elements or querying whether an element is present
+//!       will scale less well to larger datasets than in the more common
+//!       hash-based multiset implementations: element-wise operations also have
+//!       logarithmic complexity, whereas a hash-based multiset can instead
+//!       achieve a constant-time operation complexity that's independent of the
+//!       collection size.
+//! - It is specialized for primitive number types and `repr(transparent)`
+//!   wrappers thereof, which means that it can leverage the property of these
+//!   numbers to improve ergonomics and efficiency:
+//!     * Since all primitive number types are Copy, we do not need to bother
+//!       with references and [`Borrow`](std::borrow::Borrow) trait complexity
+//!       like general-purpose map and set implementations do, and can instead
+//!       provide a simpler value-based API.
+//!     * Since all primitive number types have well-behaved [`Eq`]
+//!       implementations where numbers that compare equal are identical, we do
+//!       not need to track lists of equal entries like many multiset
+//!       implementations do, and can instead use a more efficient sparse
+//!       histogramming approach where we simply count the number of equal
+//!       entries.
 //!
-//! Owing to its intended application domain, this multiset implementation is
-//! designed for `Copy` types like floats, which allows it to perform a few
-//! operations a bit faster and most importantly have a much more ergonomic API.
+//! One example application of such a multiset implementation is median
+//! filtering of streaming numerical data for which the classic dense histogram
+//! approach is not applicable, such as floats and integers of width >= 32 bits.
 //!
-//! To use this crate with floating-point data, you will need an [`Ord`] float
-//! wrapper, such as the
+//! To use this crate with floating-point data, you will need to use one of the
+//! available [`Ord`] float wrapper that assert absence of NaNs, such as the
 //! [`NotNan`](https://docs.rs/ordered-float/latest/ordered_float/struct.NotNan.html)
-//! type from the [`ordered_float`](https://docs.rs/ordered-float) crate.
+//! type from the [`ordered_float`](https://docs.rs/ordered-float) crate. We do
+//! not handle this concern for you because initially checking for NaN has a
+//! cost and we believe this cost is best paid once on your side and hopefully
+//! amortized across many reuses of the resulting dataset, rather than
+//! repeatedly paid every time an element is inserted into a
+//! [`NumericalMultiset`].
 
 use std::{
     cmp::Ordering,
@@ -35,7 +57,11 @@ use std::{
     ops::{BitAnd, BitOr, BitXor, RangeBounds, Sub},
 };
 
-/// An ordered multiset implementation
+/// An ordered multiset implementation for primitive number types based on
+/// sparse histograms.
+///
+/// You can learn more about the design rationale and overall capabilities of
+/// this data structure in the [crate-level documentation](index.html).
 ///
 /// At the time of writing, this data structure is based on the standard
 /// library's [`BTreeMap`], and many points of the [`BTreeMap`] documentation
@@ -45,19 +71,59 @@ use std::{
 /// In all the following documentation, we will use the following terminology:
 ///
 /// - "values" refers to a unique value as defined by equality of the
-///   [`PartialEq`] implementation of type `T`
+///   [`Eq`] implementation of type `T`
 /// - "elements" refers to possibly duplicate occurences of a value within the
 ///   multiset.
 /// - "multiplicity" refers to the number of occurences of a value within the
 ///   multiset, i.e. the number of elements that are equal to this value.
+///
+/// # Examples
+///
+/// ```
+/// use numerical_multiset::NumericalMultiset;
+/// use std::num::NonZeroUsize;
+///
+/// // Create a multiset
+/// let mut set = NumericalMultiset::new();
+///
+/// // Inserting elements that do not exist yet is handled much like a standard
+/// // library set type, except we return an Option instead of a boolean...
+/// assert!(set.insert(123).is_none());
+/// assert!(set.insert(456).is_none());
+///
+/// // ...which allows us to report the number of pre-existing elements, if any
+/// assert_eq!(set.insert(123), NonZeroUsize::new(1));
+///
+/// // It is possible to query the minimal and maximal elements cheaply, along
+/// // with their multiplicity within the multiset.
+/// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+/// assert_eq!(set.first(), Some((123, nonzero(2))));
+/// assert_eq!(set.last(), Some((456, nonzero(1))));
+///
+/// // ...and it is more generally possible to iterate over elements in order,
+/// // from the smallest to the largest:
+/// for (elem, multiplicity) in &set {
+///     println!("{elem} with multiplicity {multiplicity}");
+/// }
+/// ```
 #[derive(Clone, Debug, Default, Eq)]
-pub struct OrderedMultiset<T> {
+pub struct NumericalMultiset<T> {
     value_to_multiplicity: BTreeMap<T, NonZeroUsize>,
     len: usize,
 }
 //
-impl<T> OrderedMultiset<T> {
-    /// Makes a new, empty `OrderedMultiset`
+impl<T> NumericalMultiset<T> {
+    /// Makes a new, empty `NumericalMultiset`.
+    ///
+    /// Does not allocate anything on its own.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let mut set: NumericalMultiset<i32> = NumericalMultiset::new();
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn new() -> Self {
         Self {
@@ -108,15 +174,15 @@ impl<T> OrderedMultiset<T> {
 
     /// Update `self.len` to match `self.value_to_multiplicity` contents
     ///
-    /// This expensive O(N) operation should only be performed after calling
+    /// This expensive `O(N)` operation should only be performed after calling
     /// `BTreeMap` operations that do not provide the right hooks to update the
-    /// length iteratively.
+    /// length field more efficiently.
     fn reset_len(&mut self) {
         self.len = self.value_to_multiplicity.values().map(|x| x.get()).sum();
     }
 }
 
-impl<T: Ord> OrderedMultiset<T> {
+impl<T: Ord> NumericalMultiset<T> {
     /// Query the number of occurences of a value inside of the multiset
     #[inline]
     #[must_use = "Only effect is to produce a result"]
@@ -340,7 +406,7 @@ impl<T: Ord> OrderedMultiset<T> {
     }
 }
 
-impl<T: Copy + Ord> OrderedMultiset<T> {
+impl<T: Copy + Ord> NumericalMultiset<T> {
     /// Minimal value present in the multiset along with its element multiplicity
     #[must_use = "Only effect is to produce a result"]
     pub fn first(&self) -> Option<(T, NonZeroUsize)> {
@@ -372,6 +438,27 @@ impl<T: Copy + Ord> OrderedMultiset<T> {
     ///
     /// Panics if range `start > end`. Panics if range `start == end` and both
     /// bounds are `Excluded`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let mut set = NumericalMultiset::new();
+    /// set.insert(3);
+    /// set.insert(5);
+    /// set.insert(5);
+    /// set.insert(8);
+    /// set.insert(3);
+    ///
+    /// for (elem, multiplicity) in set.range(4..) {
+    ///     match elem {
+    ///         5 => assert_eq!(multiplicity.get(), 2),
+    ///         8 => assert_eq!(multiplicity.get(), 1),
+    ///         _ => unreachable!(),
+    ///     }
+    /// }
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn range<R>(
         &self,
@@ -389,10 +476,10 @@ impl<T: Copy + Ord> OrderedMultiset<T> {
     /// self but not in other, along with their multiplicities, sorted in
     /// ascending value order.
     ///
-    /// In the context of a multiset, if `self` contains more occurences of a
-    /// certain value than `other`, then an entry associated with that value
-    /// will still be yielded. Its multiplicity will just be the difference of
-    /// the entry multiplicities from `self` and `other`.
+    /// If `self` contains more occurences of a certain value than `other`, then
+    /// the output iterator will yield an entry associated with that common
+    /// value, with a multiplicity that is the difference of the entry
+    /// multiplicities from `self` and `other`.
     #[must_use = "Only effect is to produce a result"]
     pub fn difference<'a>(
         &'a self,
@@ -454,11 +541,10 @@ impl<T: Copy + Ord> OrderedMultiset<T> {
     /// values that are in self or in other but not in both, along with their
     /// multiplicities, sorted in ascending value order.
     ///
-    /// In the context of a multiset, if both `self` and `other` contain
-    /// occurences of a certain value with different multiplicities, then an
-    /// entry associated with that value will still be yielded. Its multiplicity
-    /// will just be the absolute difference of the entry multiplicities from
-    /// `self` and `other`.
+    /// If both `self` and `other` contain occurences of a certain value with
+    /// different multiplicities, then the output iterator will yield an entry
+    /// associated with that common value, with a multiplicity that is the
+    /// absolute difference of the entry multiplicities from `self` and `other`.
     #[must_use = "Only effect is to produce a result"]
     pub fn symmetric_difference<'a>(
         &'a self,
@@ -516,8 +602,8 @@ impl<T: Copy + Ord> OrderedMultiset<T> {
     /// that are both in self and other, along with their multiplicities, in
     /// ascending value order.
     ///
-    /// In the context of a multiset, the multiplicity of these common values
-    /// will be equal to the minimum of the multiplicities from each side.
+    /// The multiplicity of common values will be equal to the minimum of the
+    /// multiplicities from each side.
     #[must_use = "Only effect is to produce a result"]
     pub fn intersection<'a>(
         &'a self,
@@ -563,8 +649,8 @@ impl<T: Copy + Ord> OrderedMultiset<T> {
     /// `self` or `other`, along with their multiplicities (which are summed in
     /// the case of common elements), in ascending order.
     ///
-    /// In the context of a multiset, the multiplicity of these common values
-    /// will be equal to the maximum of the multiplicities from each side.
+    /// The multiplicity of common values will be equal to the maximum of the
+    /// multiplicities from each side.
     #[must_use = "Only effect is to produce a result"]
     pub fn union<'a>(
         &'a self,
@@ -636,37 +722,37 @@ impl<T: Copy + Ord> OrderedMultiset<T> {
     }
 }
 
-impl<T: Copy + Ord> BitAnd<&OrderedMultiset<T>> for &OrderedMultiset<T> {
-    type Output = OrderedMultiset<T>;
+impl<T: Copy + Ord> BitAnd<&NumericalMultiset<T>> for &NumericalMultiset<T> {
+    type Output = NumericalMultiset<T>;
 
-    /// Returns the intersection of `self` and `rhs` as a new `OrderedMultiset<T>`.
+    /// Returns the intersection of `self` and `rhs` as a new `NumericalMultiset<T>`.
     #[must_use = "Only effect is to produce a result"]
-    fn bitand(self, rhs: &OrderedMultiset<T>) -> Self::Output {
+    fn bitand(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.intersection(rhs).collect()
     }
 }
 
-impl<T: Copy + Ord> BitOr<&OrderedMultiset<T>> for &OrderedMultiset<T> {
-    type Output = OrderedMultiset<T>;
+impl<T: Copy + Ord> BitOr<&NumericalMultiset<T>> for &NumericalMultiset<T> {
+    type Output = NumericalMultiset<T>;
 
-    /// Returns the union of `self` and `rhs` as a new `OrderedMultiset<T>`.
+    /// Returns the union of `self` and `rhs` as a new `NumericalMultiset<T>`.
     #[must_use = "Only effect is to produce a result"]
-    fn bitor(self, rhs: &OrderedMultiset<T>) -> Self::Output {
+    fn bitor(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.union(rhs).collect()
     }
 }
 
-impl<T: Copy + Ord> BitXor<&OrderedMultiset<T>> for &OrderedMultiset<T> {
-    type Output = OrderedMultiset<T>;
+impl<T: Copy + Ord> BitXor<&NumericalMultiset<T>> for &NumericalMultiset<T> {
+    type Output = NumericalMultiset<T>;
 
-    /// Returns the symmetric difference of `self` and `rhs` as a new `OrderedMultiset<T>`.
+    /// Returns the symmetric difference of `self` and `rhs` as a new `NumericalMultiset<T>`.
     #[must_use = "Only effect is to produce a result"]
-    fn bitxor(self, rhs: &OrderedMultiset<T>) -> Self::Output {
+    fn bitxor(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.symmetric_difference(rhs).collect()
     }
 }
 
-impl<T: Copy + Ord> Extend<T> for OrderedMultiset<T> {
+impl<T: Copy + Ord> Extend<T> for NumericalMultiset<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for element in iter {
             self.insert(element);
@@ -674,7 +760,7 @@ impl<T: Copy + Ord> Extend<T> for OrderedMultiset<T> {
     }
 }
 
-impl<T: Copy + Ord> Extend<(T, NonZeroUsize)> for OrderedMultiset<T> {
+impl<T: Copy + Ord> Extend<(T, NonZeroUsize)> for NumericalMultiset<T> {
     /// More efficient alternative to [`Extend<T>`] for cases where you know in
     /// advance that you are going to insert several copies of a value
     fn extend<I: IntoIterator<Item = (T, NonZeroUsize)>>(&mut self, iter: I) {
@@ -684,7 +770,7 @@ impl<T: Copy + Ord> Extend<(T, NonZeroUsize)> for OrderedMultiset<T> {
     }
 }
 
-impl<T: Copy + Ord> FromIterator<T> for OrderedMultiset<T> {
+impl<T: Copy + Ord> FromIterator<T> for NumericalMultiset<T> {
     #[must_use = "Only effect is to produce a result"]
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut result = Self::new();
@@ -693,7 +779,7 @@ impl<T: Copy + Ord> FromIterator<T> for OrderedMultiset<T> {
     }
 }
 
-impl<T: Copy + Ord> FromIterator<(T, NonZeroUsize)> for OrderedMultiset<T> {
+impl<T: Copy + Ord> FromIterator<(T, NonZeroUsize)> for NumericalMultiset<T> {
     /// More efficient alternative to [`FromIterator<T>`] for cases where you
     /// know in advance that you are going to insert several copies of a value
     #[must_use = "Only effect is to produce a result"]
@@ -704,13 +790,13 @@ impl<T: Copy + Ord> FromIterator<(T, NonZeroUsize)> for OrderedMultiset<T> {
     }
 }
 
-impl<T: Hash> Hash for OrderedMultiset<T> {
+impl<T: Hash> Hash for NumericalMultiset<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.value_to_multiplicity.hash(state)
     }
 }
 
-impl<'a, T: Copy + Ord> IntoIterator for &'a OrderedMultiset<T> {
+impl<'a, T: Copy + Ord> IntoIterator for &'a NumericalMultiset<T> {
     type Item = (T, NonZeroUsize);
     type IntoIter = Iter<'a, T>;
 
@@ -720,10 +806,10 @@ impl<'a, T: Copy + Ord> IntoIterator for &'a OrderedMultiset<T> {
     }
 }
 //
-/// An iterator over the entries of an [`OrderedMultiset`], sorted by value.
+/// An iterator over the entries of an [`NumericalMultiset`], sorted by value.
 ///
-/// This `struct` is created by the [`iter()`](OrderedMultiset::iter) method on
-/// [`OrderedMultiset`]. See its documentation for more.
+/// This `struct` is created by the [`iter()`](NumericalMultiset::iter) method on
+/// [`NumericalMultiset`]. See its documentation for more.
 #[derive(Clone, Debug, Default)]
 pub struct Iter<'a, T: Copy + Ord>(btree_map::Iter<'a, T, NonZeroUsize>);
 //
@@ -789,22 +875,22 @@ impl<T: Copy + Ord> Iterator for Iter<'_, T> {
     }
 }
 
-impl<T: Copy + Ord> IntoIterator for OrderedMultiset<T> {
+impl<T: Copy + Ord> IntoIterator for NumericalMultiset<T> {
     type Item = (T, NonZeroUsize);
     type IntoIter = IntoIter<T>;
 
-    /// Gets an iterator for moving out the `OrderedMultiset`’s contents in
+    /// Gets an iterator for moving out the `NumericalMultiset`’s contents in
     /// ascending order.
     fn into_iter(self) -> Self::IntoIter {
         IntoIter(self.value_to_multiplicity.into_iter())
     }
 }
 //
-/// An owning iterator over the entries of an [`OrderedMultiset`], sorted by
+/// An owning iterator over the entries of an [`NumericalMultiset`], sorted by
 /// value.
 ///
 /// This struct is created by the [`into_iter`](IntoIterator::into_iter) method
-/// on [`OrderedMultiset`] (provided by the [`IntoIterator`] trait). See its
+/// on [`NumericalMultiset`] (provided by the [`IntoIterator`] trait). See its
 /// documentation for more.
 #[derive(Debug, Default)]
 pub struct IntoIter<T: Copy + Ord>(btree_map::IntoIter<T, NonZeroUsize>);
@@ -871,21 +957,21 @@ impl<T: Copy + Ord> Iterator for IntoIter<T> {
     }
 }
 
-impl<T: Ord> Ord for OrderedMultiset<T> {
+impl<T: Ord> Ord for NumericalMultiset<T> {
     #[must_use = "Only effect is to produce a result"]
     fn cmp(&self, other: &Self) -> Ordering {
         self.value_to_multiplicity.cmp(&other.value_to_multiplicity)
     }
 }
 
-impl<T: PartialEq> PartialEq for OrderedMultiset<T> {
+impl<T: PartialEq> PartialEq for NumericalMultiset<T> {
     #[must_use = "Only effect is to produce a result"]
     fn eq(&self, other: &Self) -> bool {
         self.len == other.len && self.value_to_multiplicity == other.value_to_multiplicity
     }
 }
 
-impl<T: PartialOrd> PartialOrd for OrderedMultiset<T> {
+impl<T: PartialOrd> PartialOrd for NumericalMultiset<T> {
     #[must_use = "Only effect is to produce a result"]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.value_to_multiplicity
@@ -893,12 +979,12 @@ impl<T: PartialOrd> PartialOrd for OrderedMultiset<T> {
     }
 }
 
-impl<T: Copy + Ord> Sub<&OrderedMultiset<T>> for &OrderedMultiset<T> {
-    type Output = OrderedMultiset<T>;
+impl<T: Copy + Ord> Sub<&NumericalMultiset<T>> for &NumericalMultiset<T> {
+    type Output = NumericalMultiset<T>;
 
-    /// Returns the difference of `self` and `rhs` as a new `OrderedMultiset<T>`.
+    /// Returns the difference of `self` and `rhs` as a new `NumericalMultiset<T>`.
     #[must_use = "Only effect is to produce a result"]
-    fn sub(self, rhs: &OrderedMultiset<T>) -> Self::Output {
+    fn sub(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.difference(rhs).collect()
     }
 }
