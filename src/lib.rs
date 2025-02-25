@@ -404,6 +404,18 @@ impl<T: Ord> NumericalMultiset<T> {
         self.reset_len();
         other.len = 0;
     }
+
+    /// Splits the collection into two at the value. Returns a new collection
+    /// with all elements greater than or equal to the value.
+    pub fn split_off(&mut self, value: T) -> Self {
+        let mut result = Self {
+            value_to_multiplicity: self.value_to_multiplicity.split_off(&value),
+            len: 0,
+        };
+        self.reset_len();
+        result.reset_len();
+        result
+    }
 }
 
 impl<T: Copy + Ord> NumericalMultiset<T> {
@@ -691,18 +703,6 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     pub fn retain(&mut self, mut f: impl FnMut(T, NonZeroUsize) -> bool) {
         self.value_to_multiplicity.retain(|&k, &mut v| f(k, v));
         self.reset_len();
-    }
-
-    /// Splits the collection into two at the value. Returns a new collection
-    /// with all elements greater than or equal to the value.
-    pub fn split_off(&mut self, value: T) -> Self {
-        let mut result = Self {
-            value_to_multiplicity: self.value_to_multiplicity.split_off(&value),
-            len: 0,
-        };
-        self.reset_len();
-        result.reset_len();
-        result
     }
 
     /// Iterator over all distinct values in the multiset, without their
