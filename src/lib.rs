@@ -132,7 +132,18 @@ impl<T> NumericalMultiset<T> {
         }
     }
 
-    /// Remove all elements from the multiset
+    /// Clears the multiset, removing all elements.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let mut v = NumericalMultiset::new();
+    /// v.insert(1);
+    /// v.clear();
+    /// assert!(v.is_empty());
+    /// ```
     pub fn clear(&mut self) {
         self.value_to_multiplicity.clear();
         self.len = 0;
@@ -185,6 +196,7 @@ impl<T> NumericalMultiset<T> {
 impl<T: Copy> NumericalMultiset<T> {
     /// Iterator over all distinct values in the multiset, without their
     /// multiplicities. Output is sorted by ascending value.
+    // TODO: Advertise iter()
     #[must_use = "Only effect is to produce a result"]
     pub fn values(
         &self,
@@ -194,6 +206,7 @@ impl<T: Copy> NumericalMultiset<T> {
 
     /// Iterator over all distinct values in the multiset, along with their
     /// multiplicities. Output is sorted by ascending value.
+    // TODO: Advertise values()
     #[must_use = "Only effect is to produce a result"]
     pub fn iter(&self) -> Iter<'_, T> {
         self.into_iter()
@@ -201,7 +214,49 @@ impl<T: Copy> NumericalMultiset<T> {
 }
 
 impl<T: Ord> NumericalMultiset<T> {
-    /// Query the number of occurences of a value inside of the multiset
+    /// Returns `true` if the multiset contains at least one occurence of a
+    /// value.
+    ///
+    /// See also [`multiplicity()`](Self::multiplicity) if you need to know
+    /// precisely how many occurences of a value are present inside of the
+    /// multiset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let set = NumericalMultiset::from_iter([1, 2, 2]);
+    ///
+    /// assert_eq!(set.contains(1), true);
+    /// assert_eq!(set.contains(2), true);
+    /// assert_eq!(set.contains(3), false);
+    /// ```
+    #[inline]
+    #[must_use = "Only effect is to produce a result"]
+    pub fn contains(&self, value: T) -> bool {
+        self.value_to_multiplicity.contains_key(&value)
+    }
+
+    /// Returns the number of occurences of a value inside of the multiset, or
+    /// `None` if it is not present.
+    ///
+    /// See also [`contains()`](Self::contains) if you only need to know whether
+    /// at least one occurence of value is present inside of the multiset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let set = NumericalMultiset::from_iter([1, 2, 2]);
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(set.multiplicity(1), Some(nonzero(1)));
+    /// assert_eq!(set.multiplicity(2), Some(nonzero(2)));
+    /// assert_eq!(set.multiplicity(3), None);
+    /// ```
     #[inline]
     #[must_use = "Only effect is to produce a result"]
     pub fn multiplicity(&self, value: T) -> Option<NonZeroUsize> {
@@ -209,7 +264,23 @@ impl<T: Ord> NumericalMultiset<T> {
     }
 
     /// Returns `true` if `self` has no elements in common with `other`. This is
-    /// equivalent to checking for an empty intersection.
+    /// logically equivalent to checking for an empty intersection, but more
+    /// efficient.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let a = NumericalMultiset::from_iter([1, 2, 2]);
+    /// let mut b = NumericalMultiset::new();
+    ///
+    /// assert!(a.is_disjoint(&b));
+    /// b.insert(3);
+    /// assert!(a.is_disjoint(&b));
+    /// b.insert(2);
+    /// assert!(!a.is_disjoint(&b));
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn is_disjoint(&self, other: &Self) -> bool {
         let mut iter1 = self.value_to_multiplicity.keys().peekable();
@@ -247,8 +318,26 @@ impl<T: Ord> NumericalMultiset<T> {
     /// Returns `true` if the set is a subset of another, i.e., `other` contains
     /// at least all the elements in `self`.
     ///
-    /// In a multiset context, this means that if `self` contains N copies of a
-    /// certain value, then `other` must contain N or more copies of that value.
+    /// In a multiset context, this means that if `self` contains N occurences
+    /// of a certain value, then `other` must contain N or more occurences of
+    /// that value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let sup = NumericalMultiset::from_iter([1, 2, 2]);
+    /// let mut set = NumericalMultiset::new();
+    ///
+    /// assert!(set.is_subset(&sup));
+    /// set.insert(2);
+    /// assert!(set.is_subset(&sup));
+    /// set.insert(2);
+    /// assert!(set.is_subset(&sup));
+    /// set.insert(2);
+    /// assert!(!set.is_subset(&sup));
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn is_subset(&self, other: &Self) -> bool {
         let mut other_iter = other.value_to_multiplicity.iter().peekable();
@@ -305,12 +394,37 @@ impl<T: Ord> NumericalMultiset<T> {
     ///
     /// In a multiset context, this means that if `other` contains N copies of a
     /// certain value, then `self` must contain N or more copies of that value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let sub = NumericalMultiset::from_iter([1, 2, 2]);
+    /// let mut set = NumericalMultiset::new();
+    ///
+    /// assert!(!set.is_superset(&sub));
+    ///
+    /// set.insert(3);
+    /// set.insert(1);
+    /// assert!(!set.is_superset(&sub));
+    ///
+    /// set.insert(2);
+    /// assert!(!set.is_superset(&sub));
+    ///
+    /// set.insert(2);
+    /// assert!(set.is_superset(&sub));
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn is_superset(&self, other: &Self) -> bool {
         other.is_subset(self)
     }
 
+    // TODO: Add pop_first() based on BTreeMap::first_entry() + advertise pop_all_first()
+
     /// Remove all copies of the smallest value from the multiset, if any
+    // TODO: Advertise pop_first()
+    #[inline]
     #[must_use = "Invalid removal should be handled"]
     pub fn pop_all_first(&mut self) -> Option<(T, NonZeroUsize)> {
         self.value_to_multiplicity
@@ -318,7 +432,11 @@ impl<T: Ord> NumericalMultiset<T> {
             .inspect(|(_value, count)| self.len -= count.get())
     }
 
+    // TODO: Add pop_last() based on BTreeMap::last_entry() + advertise pop_all_last()
+
     /// Remove all copies of the largest value from the multiset, if any
+    // TODO: Advertise pop_last()
+    #[inline]
     #[must_use = "Invalid removal should be handled"]
     pub fn pop_all_last(&mut self) -> Option<(T, NonZeroUsize)> {
         self.value_to_multiplicity
@@ -326,14 +444,9 @@ impl<T: Ord> NumericalMultiset<T> {
             .inspect(|(_value, count)| self.len -= count.get())
     }
 
-    /// Truth that at least one copy of a value exists in the multiset
-    #[must_use = "Only effect is to produce a result"]
-    pub fn contains(&self, value: T) -> bool {
-        self.value_to_multiplicity.contains_key(&value)
-    }
-
     /// Insert a copy of a value, tell how many identical elements were already
     /// present in the multiset before insertion.
+    // TODO: Advertise insert_multiple()
     #[inline]
     pub fn insert(&mut self, value: T) -> Option<NonZeroUsize> {
         self.insert_multiple(value, NonZeroUsize::new(1).unwrap())
@@ -341,6 +454,7 @@ impl<T: Ord> NumericalMultiset<T> {
 
     /// Insert multiple copies of a value, tell how many identical elements were
     /// already present in the multiset before insertion.
+    // TODO: Advertise insert() as a convenience shortcut
     #[inline]
     pub fn insert_multiple(&mut self, value: T, count: NonZeroUsize) -> Option<NonZeroUsize> {
         let result = match self.value_to_multiplicity.entry(value) {
@@ -383,6 +497,7 @@ impl<T: Ord> NumericalMultiset<T> {
 
     /// Attempt to remove one occurence of a value from the multiset, on success
     /// tell how many identical elements were previously present in the multiset.
+    // TODO: Add remove_multiple() and advertise that + remove_all()
     #[inline]
     #[must_use = "Invalid removal should be handled"]
     pub fn remove(&mut self, value: T) -> Option<NonZeroUsize> {
@@ -407,6 +522,7 @@ impl<T: Ord> NumericalMultiset<T> {
 
     /// Attempt to remove all occurences of a value from the multiset, on
     /// success tell how many identical elements were removed from the multiset.
+    // TODO: Advertise remove()
     #[inline]
     #[must_use = "Invalid removal should be handled"]
     pub fn remove_all(&mut self, value: T) -> Option<NonZeroUsize> {
@@ -417,6 +533,7 @@ impl<T: Ord> NumericalMultiset<T> {
 
     /// Moves all elements from `other` into `self`, leaving `other` empty.
     pub fn append(&mut self, other: &mut Self) {
+        // FIXME: This is wrong, must sum identical entries
         self.value_to_multiplicity
             .append(&mut other.value_to_multiplicity);
         self.reset_len();
@@ -437,7 +554,9 @@ impl<T: Ord> NumericalMultiset<T> {
 }
 
 impl<T: Copy + Ord> NumericalMultiset<T> {
-    /// Minimal value present in the multiset along with its element multiplicity
+    /// Minimal value present in the multiset, if any, along with its element
+    /// multiplicity.
+    #[inline]
     #[must_use = "Only effect is to produce a result"]
     pub fn first(&self) -> Option<(T, NonZeroUsize)> {
         self.value_to_multiplicity
@@ -445,7 +564,9 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
             .map(|(&k, &v)| (k, v))
     }
 
-    /// Maximal value present in the multiset along with its element multiplicity
+    /// Maximal value present in the multiset, if any, along with its element
+    /// multiplicity.
+    #[inline]
     #[must_use = "Only effect is to produce a result"]
     pub fn last(&self) -> Option<(T, NonZeroUsize)> {
         self.value_to_multiplicity
