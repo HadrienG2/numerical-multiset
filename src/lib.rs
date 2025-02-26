@@ -473,21 +473,20 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     ///
     /// ```
     /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
     ///
     /// let mut set = NumericalMultiset::new();
     /// set.insert(3);
-    /// set.insert(5);
+    /// set.insert(3);
     /// set.insert(5);
     /// set.insert(8);
-    /// set.insert(3);
+    /// set.insert(8);
     ///
-    /// for (elem, multiplicity) in set.range(4..) {
-    ///     match elem {
-    ///         5 => assert_eq!(multiplicity.get(), 2),
-    ///         8 => assert_eq!(multiplicity.get(), 1),
-    ///         _ => unreachable!(),
-    ///     }
-    /// }
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(
+    ///     set.range(4..).collect::<Vec<_>>(),
+    ///     [(5, nonzero(1)), (8, nonzero(2))]
+    /// );
     /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn range<R>(
@@ -503,13 +502,42 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     }
 
     /// Visits the elements representing the difference, i.e., those that are in
-    /// self but not in other, along with their multiplicities, sorted in
-    /// ascending value order.
+    /// `self` but not in `other`. They are sorted in ascending value order and
+    /// emitted in the usual deduplicated `(value, multiplicity)` format.
     ///
-    /// If `self` contains more occurences of a certain value than `other`, then
-    /// the output iterator will yield an entry associated with that common
-    /// value, with a multiplicity that is the difference of the entry
-    /// multiplicities from `self` and `other`.
+    /// The difference is computed element-wise, not value-wise, so if both
+    /// `self` and `other` contain occurences of a certain value `v` with
+    /// respective multiplicities `s` and `o`, then...
+    ///
+    /// - If `self` contains more occurences of `v` than `other` (i.e. `s > o`),
+    ///   then the difference will contain `s - o` occurences of `v`.
+    /// - Otherwise (if `s <= o`) the difference will not contain any occurence
+    ///   of `v`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut a = NumericalMultiset::new();
+    /// a.insert(1);
+    /// a.insert(1);
+    /// a.insert(2);
+    /// a.insert(2);
+    /// a.insert(3);
+    ///
+    /// let mut b = NumericalMultiset::new();
+    /// b.insert(2);
+    /// b.insert(3);
+    /// b.insert(4);
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(
+    ///     a.difference(&b).collect::<Vec<_>>(),
+    ///     [(1, nonzero(2)), (2, nonzero(1))]
+    /// );
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn difference<'a>(
         &'a self,
@@ -567,14 +595,45 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         })
     }
 
-    /// Visits the elements representing the symmetric difference, i.e., the
-    /// values that are in self or in other but not in both, along with their
-    /// multiplicities, sorted in ascending value order.
+    /// Visits the elements representing the symmetric difference, i.e., those
+    /// that are in `self` or in `other` but not in both. They are sorted in
+    /// ascending value order and emitted in the usual deduplicated `(value,
+    /// multiplicity)` format.
     ///
-    /// If both `self` and `other` contain occurences of a certain value with
-    /// different multiplicities, then the output iterator will yield an entry
-    /// associated with that common value, with a multiplicity that is the
-    /// absolute difference of the entry multiplicities from `self` and `other`.
+    /// The symmetric difference is computed element-wise, not value-wise, so if
+    /// both `self` and `other` contain occurences of a certain value `v` with
+    /// respective multiplicities `s` and `o`, then...
+    ///
+    /// - If `self` contains as many occurences of `v` as `other` (i.e. `s ==
+    ///   o`), then the symmetric difference will not contain any occurence of
+    ///   `v`.
+    /// - Otherwise (if `s != o` the symmetric difference will contain
+    ///   `s.abs_diff(o)` occurences of `v`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut a = NumericalMultiset::new();
+    /// a.insert(1);
+    /// a.insert(1);
+    /// a.insert(2);
+    /// a.insert(2);
+    /// a.insert(3);
+    ///
+    /// let mut b = NumericalMultiset::new();
+    /// b.insert(2);
+    /// b.insert(3);
+    /// b.insert(4);
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(
+    ///     a.symmetric_difference(&b).collect::<Vec<_>>(),
+    ///     [(1, nonzero(2)), (2, nonzero(1)), (4, nonzero(1))]
+    /// );
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn symmetric_difference<'a>(
         &'a self,
@@ -628,12 +687,39 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         })
     }
 
-    /// Visits the elements representing the intersection, i.e., the values
-    /// that are both in self and other, along with their multiplicities, in
-    /// ascending value order.
+    /// Visits the elements representing the intersection, i.e., those that are
+    /// both in `self` and `other`. They are sorted in ascending value order and
+    /// emitted in the usual deduplicated `(value, multiplicity)` format.
     ///
-    /// The multiplicity of common values will be equal to the minimum of the
-    /// multiplicities from each side.
+    /// The intersection is computed element-wise, not value-wise, so if both
+    /// `self` and `other` contain occurences of a certain value `v` with
+    /// respective multiplicities `s` and `o`, then the intersection will
+    /// contain `s.min(o)` occurences of `v`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut a = NumericalMultiset::new();
+    /// a.insert(1);
+    /// a.insert(1);
+    /// a.insert(2);
+    /// a.insert(2);
+    /// a.insert(3);
+    ///
+    /// let mut b = NumericalMultiset::new();
+    /// b.insert(2);
+    /// b.insert(3);
+    /// b.insert(4);
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(
+    ///     a.intersection(&b).collect::<Vec<_>>(),
+    ///     [(2, nonzero(1)), (3, nonzero(1))]
+    /// );
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn intersection<'a>(
         &'a self,
@@ -675,12 +761,40 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         })
     }
 
-    /// Visits the elements representing the union, i.e., all the elements in
-    /// `self` or `other`, along with their multiplicities (which are summed in
-    /// the case of common elements), in ascending order.
+    /// Visits the elements representing the union, i.e., those that are in
+    /// either `self` or `other`, without counting values that are present in
+    /// both multisets twice. They are sorted in ascending value order and
+    /// emitted in the usual deduplicated `(value, multiplicity)` format.
     ///
-    /// The multiplicity of common values will be equal to the maximum of the
-    /// multiplicities from each side.
+    /// The union is computed element-wise, not value-wise, so if both
+    /// `self` and `other` contain occurences of a certain value `v` with
+    /// respective multiplicities `s` and `o`, then the union will contain
+    /// `s.max(o)` occurences of `v`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut a = NumericalMultiset::new();
+    /// a.insert(1);
+    /// a.insert(1);
+    /// a.insert(2);
+    /// a.insert(2);
+    /// a.insert(3);
+    ///
+    /// let mut b = NumericalMultiset::new();
+    /// b.insert(2);
+    /// b.insert(3);
+    /// b.insert(4);
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(
+    ///     a.union(&b).collect::<Vec<_>>(),
+    ///     [(1, nonzero(2)), (2, nonzero(2)), (3, nonzero(1)), (4, nonzero(1))]
+    /// );
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn union<'a>(
         &'a self,
@@ -716,8 +830,8 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
 
     /// Retains only the elements specified by the predicate.
     ///
-    /// In other words, remove all values `v` for which `f(v)` returns
-    /// `false`. The values are visited in ascending order.
+    /// In other words, remove all values `v` with multiplicity `m` for which
+    /// `f(v, m)` returns `false`. The values are visited in ascending order.
     pub fn retain(&mut self, mut f: impl FnMut(T, NonZeroUsize) -> bool) {
         self.value_to_multiplicity.retain(|&k, &mut v| f(k, v));
         self.reset_len();
