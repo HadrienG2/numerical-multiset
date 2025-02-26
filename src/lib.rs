@@ -23,10 +23,10 @@
 //! - It is specialized for primitive number types and `repr(transparent)`
 //!   wrappers thereof, which means that it can leverage the property of these
 //!   numbers to improve ergonomics and efficiency:
-//!     * Since all primitive number types are Copy, we do not need to bother
-//!       with references and [`Borrow`](std::borrow::Borrow) trait complexity
-//!       like general-purpose map and set implementations do, and can instead
-//!       provide a simpler value-based API.
+//!     * Since all primitive number types are [`Copy`], we do not need to
+//!       bother with references and [`Borrow`](std::borrow::Borrow) trait
+//!       complexity like general-purpose map and set implementations do, and
+//!       can instead provide a simpler value-based API.
 //!     * Since all primitive number types have well-behaved [`Eq`]
 //!       implementations where numbers that compare equal are identical, we do
 //!       not need to track lists of equal entries like many multiset
@@ -34,9 +34,10 @@
 //!       histogramming approach where we simply count the number of equal
 //!       entries.
 //!
-//! One example application of such a multiset implementation is median
-//! filtering of streaming numerical data for which the classic dense histogram
-//! approach is not applicable, such as floats and integers of width >= 32 bits.
+//! One example application of this multiset implementation would be median
+//! filtering of streaming numerical data whose bit width is too large for the
+//! classic dense histogram approach to be applicable, like floats and integers
+//! of width >= 32 bits.
 //!
 //! To use this crate with floating-point data, you will need to use one of the
 //! available [`Ord`] float wrapper that assert absence of NaNs, such as the
