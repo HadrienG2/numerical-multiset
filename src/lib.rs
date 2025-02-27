@@ -2,18 +2,17 @@
 //! sparse histograms.
 //!
 //! This crate implements a kind of multiset, which is a generalization of the
-//! notion of mathematical set where multiple values that are equal to each
+//! notion of mathematical set where multiple elements that are equal to each
 //! other can be present simulatneously.
 //!
-//! Our multiset implementation differs from the most popular multiset
-//! implementations of crates.io at the time of its release in the following
-//! respects:
+//! Our multiset implementation differs from popular multiset implementations of
+//! crates.io at the time of its release in the following respects:
 //!
 //! - It is ordered, which means that order-based queries such as getting a
 //!   sorted list of elements or finding the minimum and maximum elements are
 //!   relatively cheap. For example, the complexity of a min/max query grows
 //!   logarithmically with the number of distinct values in the multiset.
-//!     * The price to pay for this feature is that classic set operations like
+//!     * The price to pay for this ordering is that classic set operations like
 //!       inserting/removing elements or querying whether an element is present
 //!       will scale less well to larger datasets than in the more common
 //!       hash-based multiset implementations: element-wise operations also have
@@ -22,7 +21,7 @@
 //!       collection size.
 //! - It is specialized for primitive number types and `repr(transparent)`
 //!   wrappers thereof, which means that it can leverage the property of these
-//!   numbers to improve ergonomics and efficiency:
+//!   numbers to improve ergonomics and compute/memory efficiency:
 //!     * Since all primitive number types are [`Copy`], we do not need to
 //!       bother with references and [`Borrow`](std::borrow::Borrow) trait
 //!       complexity like general-purpose map and set implementations do, and
@@ -43,11 +42,10 @@
 //! available [`Ord`] float wrapper that assert absence of NaNs, such as the
 //! [`NotNan`](https://docs.rs/ordered-float/latest/ordered_float/struct.NotNan.html)
 //! type from the [`ordered_float`](https://docs.rs/ordered-float) crate. We do
-//! not handle this concern for you because initially checking for NaN has a
-//! cost and we believe this cost is best paid once on your side and hopefully
-//! amortized across many reuses of the resulting dataset, rather than
-//! repeatedly paid every time an element is inserted into a
-//! [`NumericalMultiset`].
+//! not handle this concern for you because checking for NaN has a cost and we
+//! believe this cost is best paid once on your side and hopefully amortized
+//! across many reuses of the resulting wrapper, rather than repeatedly paid
+//! every time an element is inserted into a [`NumericalMultiset`].
 
 use std::{
     cmp::Ordering,
@@ -150,16 +148,10 @@ impl<T> NumericalMultiset<T> {
         self.len = 0;
     }
 
-    /// Truth that the multiset contains no elements
-    #[must_use = "Only effect is to produce a result"]
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
     /// Number of elements currently present in the multiset, including
     /// duplicate occurences of a value.
     ///
-    /// See also [`num_values()`](Self::num_values) for a count of unique
+    /// See also [`num_values()`](Self::num_values) for a count of distinct
     /// values, ignoring duplicate elements.
     #[must_use = "Only effect is to produce a result"]
     pub fn len(&self) -> usize {
@@ -168,15 +160,25 @@ impl<T> NumericalMultiset<T> {
 
     /// Number of distinct values currently present in the multiset
     ///
-    /// See also [`len()`](Self::len) if you want to know the total number of
-    /// multiset elements, including duplicates of the same value.
+    /// See also [`len()`](Self::len) for a count of multiset elements,
+    /// including duplicates of each value.
     #[must_use = "Only effect is to produce a result"]
     pub fn num_values(&self) -> usize {
         self.value_to_multiplicity.len()
     }
 
+    /// Truth that the multiset contains no elements
+    #[must_use = "Only effect is to produce a result"]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     /// Creates a consuming iterator visiting all the distinct values, in sorted
     /// order. The multiset cannot be used after calling this method.
+    ///
+    /// See also [`into_iter()`](IntoIterator::into_iter) for a variation of
+    /// this iterator that additionally tells how many occurences of each value
+    /// were present in the multiset.
     #[must_use = "Only effect is to produce a result"]
     pub fn into_values(
         self,
@@ -195,9 +197,11 @@ impl<T> NumericalMultiset<T> {
 }
 
 impl<T: Copy> NumericalMultiset<T> {
-    /// Iterator over all distinct values in the multiset, without their
-    /// multiplicities. Output is sorted by ascending value.
-    // TODO: Advertise iter()
+    /// Iterator over all distinct values in the multiset. Output is sorted by
+    /// ascending value.
+    ///
+    /// See also [`iter()`](Self::iter) if you need to know how many occurences
+    /// of each value are present in the multiset.
     #[must_use = "Only effect is to produce a result"]
     pub fn values(
         &self,
@@ -207,7 +211,9 @@ impl<T: Copy> NumericalMultiset<T> {
 
     /// Iterator over all distinct values in the multiset, along with their
     /// multiplicities. Output is sorted by ascending value.
-    // TODO: Advertise values()
+    ///
+    /// See also [`values()`](Self::values) for a more efficient alternative if
+    /// you do not need to know how many occurences of each value are present.
     #[must_use = "Only effect is to produce a result"]
     pub fn iter(&self) -> Iter<'_, T> {
         self.into_iter()
@@ -218,9 +224,8 @@ impl<T: Ord> NumericalMultiset<T> {
     /// Returns `true` if the multiset contains at least one occurence of a
     /// value.
     ///
-    /// See also [`multiplicity()`](Self::multiplicity) if you need to know
-    /// precisely how many occurences of a value are present inside of the
-    /// multiset.
+    /// See also [`multiplicity()`](Self::multiplicity) if you need to know how
+    /// many occurences of a value are present inside of the multiset.
     ///
     /// # Examples
     ///
@@ -240,10 +245,11 @@ impl<T: Ord> NumericalMultiset<T> {
     }
 
     /// Returns the number of occurences of a value inside of the multiset, or
-    /// `None` if it is not present.
+    /// `None` if this value is not present.
     ///
-    /// See also [`contains()`](Self::contains) if you only need to know whether
-    /// at least one occurence of value is present inside of the multiset.
+    /// See also [`contains()`](Self::contains) for a more efficient alternative
+    /// if you only need to know whether at least one occurence of value is
+    /// present inside of the multiset.
     ///
     /// # Examples
     ///
@@ -265,8 +271,8 @@ impl<T: Ord> NumericalMultiset<T> {
     }
 
     /// Returns `true` if `self` has no elements in common with `other`. This is
-    /// logically equivalent to checking for an empty intersection, but more
-    /// efficient.
+    /// logically equivalent to checking for an empty intersection, but may be
+    /// more efficient.
     ///
     /// # Examples
     ///
@@ -320,7 +326,7 @@ impl<T: Ord> NumericalMultiset<T> {
     /// at least all the elements in `self`.
     ///
     /// In a multiset context, this means that if `self` contains N occurences
-    /// of a certain value, then `other` must contain N or more occurences of
+    /// of a certain value, then `other` must contain at least N occurences of
     /// that value.
     ///
     /// # Examples
@@ -366,7 +372,7 @@ impl<T: Ord> NumericalMultiset<T> {
                         // Current value exists in both iterators
                         Ordering::Equal => {
                             // For `self` to be a subset, `other` must also
-                            // contain at least the same amount of copies of
+                            // contain at least the same number of occurences of
                             // this common value. Check this.
                             if **other_multiplicity < multiplicity {
                                 return false;
@@ -393,8 +399,9 @@ impl<T: Ord> NumericalMultiset<T> {
     /// Returns `true` if the set is a superset of another, i.e., `self`
     /// contains at least all the elements in `other`.
     ///
-    /// In a multiset context, this means that if `other` contains N copies of a
-    /// certain value, then `self` must contain N or more copies of that value.
+    /// In a multiset context, this means that if `other` contains N occurences
+    /// of a certain value, then `self` must contain at least N occurences of
+    /// that value.
     ///
     /// # Examples
     ///
@@ -421,10 +428,30 @@ impl<T: Ord> NumericalMultiset<T> {
         other.is_subset(self)
     }
 
-    // TODO: Add pop_first() based on BTreeMap::first_entry() + advertise pop_all_first()
-
-    /// Remove all copies of the smallest value from the multiset, if any
-    // TODO: Advertise pop_first()
+    /// Remove all occurences of the smallest value from the multiset, if any.
+    ///
+    /// Returns the former smallest value along with the number of occurences of
+    /// this value that were previously present in the multiset.
+    ///
+    /// See also [`pop_first()`](Self::pop_first) if you only want to remove one
+    /// occurence of the smallest value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut set = NumericalMultiset::new();
+    /// set.insert(1);
+    /// set.insert(1);
+    /// set.insert(2);
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(set.pop_all_first(), Some((1, nonzero(2))));
+    /// assert_eq!(set.pop_all_first(), Some((2, nonzero(1))));
+    /// assert_eq!(set.pop_all_first(), None);
+    /// ```
     #[inline]
     #[must_use = "Invalid removal should be handled"]
     pub fn pop_all_first(&mut self) -> Option<(T, NonZeroUsize)> {
@@ -433,10 +460,30 @@ impl<T: Ord> NumericalMultiset<T> {
             .inspect(|(_value, count)| self.len -= count.get())
     }
 
-    // TODO: Add pop_last() based on BTreeMap::last_entry() + advertise pop_all_last()
-
-    /// Remove all copies of the largest value from the multiset, if any
-    // TODO: Advertise pop_last()
+    /// Remove all occurences of the largest value from the multiset, if any
+    ///
+    /// Returns the former largest value along with the number of occurences of
+    /// this value that were previously present in the multiset.
+    ///
+    /// See also [`pop_last()`](Self::pop_last) if you only want to remove one
+    /// occurence of the largest value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut set = NumericalMultiset::new();
+    /// set.insert(1);
+    /// set.insert(1);
+    /// set.insert(2);
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(set.pop_all_last(), Some((2, nonzero(1))));
+    /// assert_eq!(set.pop_all_last(), Some((1, nonzero(2))));
+    /// assert_eq!(set.pop_all_last(), None);
+    /// ```
     #[inline]
     #[must_use = "Invalid removal should be handled"]
     pub fn pop_all_last(&mut self) -> Option<(T, NonZeroUsize)> {
@@ -445,17 +492,24 @@ impl<T: Ord> NumericalMultiset<T> {
             .inspect(|(_value, count)| self.len -= count.get())
     }
 
-    /// Insert a copy of a value, tell how many identical elements were already
-    /// present in the multiset before insertion.
-    // TODO: Advertise insert_multiple()
+    /// Insert an element into the multiset, tell how many identical elements
+    /// were already present in the multiset before insertion.
+    ///
+    /// See also [`insert_multiple()`](Self::insert_multiple) for a more
+    /// efficient alternative if you need to insert multiple copies of a value.
     #[inline]
     pub fn insert(&mut self, value: T) -> Option<NonZeroUsize> {
         self.insert_multiple(value, NonZeroUsize::new(1).unwrap())
     }
 
     /// Insert multiple copies of a value, tell how many identical elements were
-    /// already present in the multiset before insertion.
-    // TODO: Advertise insert() as a convenience shortcut
+    /// already present in the multiset.
+    ///
+    /// This method is typically used when transferring all copies of a value
+    /// from one multiset to another.
+    ///
+    /// See also [`insert()`](Self::insert) for a convenience shortcut in cases
+    /// where you only need to insert one copy of a value.
     #[inline]
     pub fn insert_multiple(&mut self, value: T, count: NonZeroUsize) -> Option<NonZeroUsize> {
         let result = match self.value_to_multiplicity.entry(value) {
@@ -475,9 +529,9 @@ impl<T: Ord> NumericalMultiset<T> {
         result
     }
 
-    /// Add multiple copies of a value, replacing all copies of this value that
-    /// were previously present in the multiset. Tell how many copies of `value`
-    /// were previously present in the multiset.
+    /// Insert multiple copies of a value, replacing all occurences of this
+    /// value that were previously present in the multiset. Tell how many
+    /// occurences of `value` were previously present in the multiset.
     #[inline]
     pub fn replace_all(&mut self, value: T, count: NonZeroUsize) -> Option<NonZeroUsize> {
         let result = match self.value_to_multiplicity.entry(value) {
@@ -496,9 +550,12 @@ impl<T: Ord> NumericalMultiset<T> {
         result
     }
 
-    /// Attempt to remove one occurence of a value from the multiset, on success
-    /// tell how many identical elements were previously present in the multiset.
-    // TODO: Add remove_multiple() and advertise that + remove_all()
+    /// Attempt to remove one element from the multiset, on success tell how
+    /// many identical elements were previously present in the multiset.
+    ///
+    /// See also [`remove_all()`](Self::remove_all) for a more efficient
+    /// alternative when you want to remove all occurences of a value from the
+    /// multiset.
     #[inline]
     #[must_use = "Invalid removal should be handled"]
     pub fn remove(&mut self, value: T) -> Option<NonZeroUsize> {
@@ -522,8 +579,10 @@ impl<T: Ord> NumericalMultiset<T> {
     }
 
     /// Attempt to remove all occurences of a value from the multiset, on
-    /// success tell how many identical elements were removed from the multiset.
-    // TODO: Advertise remove()
+    /// success tell how many elements were removed from the multiset.
+    ///
+    /// See also [`remove()`](Self::remove) if you only need to remove one
+    /// element from the multiset.
     #[inline]
     #[must_use = "Invalid removal should be handled"]
     pub fn remove_all(&mut self, value: T) -> Option<NonZeroUsize> {
@@ -532,17 +591,11 @@ impl<T: Ord> NumericalMultiset<T> {
         result
     }
 
-    /// Moves all elements from `other` into `self`, leaving `other` empty.
-    pub fn append(&mut self, other: &mut Self) {
-        // FIXME: This is wrong, must sum identical entries
-        self.value_to_multiplicity
-            .append(&mut other.value_to_multiplicity);
-        self.reset_len();
-        other.len = 0;
-    }
-
-    /// Splits the collection into two at the value. Returns a new collection
-    /// with all elements greater than or equal to the value.
+    /// Splits the collection into two at the specified `value`.
+    ///
+    /// This returns a new collection with all elements greater than or equal to
+    /// `value`. The multiset on which this method was called will retain all
+    /// elements strictly smaller than `value`.
     pub fn split_off(&mut self, value: T) -> Self {
         let mut result = Self {
             value_to_multiplicity: self.value_to_multiplicity.split_off(&value),
@@ -555,26 +608,6 @@ impl<T: Ord> NumericalMultiset<T> {
 }
 
 impl<T: Copy + Ord> NumericalMultiset<T> {
-    /// Minimal value present in the multiset, if any, along with its element
-    /// multiplicity.
-    #[inline]
-    #[must_use = "Only effect is to produce a result"]
-    pub fn first(&self) -> Option<(T, NonZeroUsize)> {
-        self.value_to_multiplicity
-            .first_key_value()
-            .map(|(&k, &v)| (k, v))
-    }
-
-    /// Maximal value present in the multiset, if any, along with its element
-    /// multiplicity.
-    #[inline]
-    #[must_use = "Only effect is to produce a result"]
-    pub fn last(&self) -> Option<(T, NonZeroUsize)> {
-        self.value_to_multiplicity
-            .last_key_value()
-            .map(|(&k, &v)| (k, v))
-    }
-
     /// Double-ended iterator over a sub-range of values and their
     /// multiplicities
     ///
@@ -729,7 +762,7 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// - If `self` contains as many occurences of `v` as `other` (i.e. `s ==
     ///   o`), then the symmetric difference will not contain any occurence of
     ///   `v`.
-    /// - Otherwise (if `s != o` the symmetric difference will contain
+    /// - Otherwise (if `s != o`) the symmetric difference will contain
     ///   `s.abs_diff(o)` occurences of `v`.
     ///
     /// # Examples
@@ -950,13 +983,173 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         })
     }
 
+    /// Minimal value present in the multiset, if any, along with its
+    /// multiplicity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut set = NumericalMultiset::new();
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(set.first(), None);
+    /// set.insert(2);
+    /// assert_eq!(set.first(), Some((2, nonzero(1))));
+    /// set.insert(2);
+    /// assert_eq!(set.first(), Some((2, nonzero(2))));
+    /// set.insert(1);
+    /// assert_eq!(set.first(), Some((1, nonzero(1))));
+    /// ```
+    #[inline]
+    #[must_use = "Only effect is to produce a result"]
+    pub fn first(&self) -> Option<(T, NonZeroUsize)> {
+        self.value_to_multiplicity
+            .first_key_value()
+            .map(|(&k, &v)| (k, v))
+    }
+
+    /// Maximal value present in the multiset, if any, along with its
+    /// multiplicity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut set = NumericalMultiset::new();
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(set.last(), None);
+    /// set.insert(1);
+    /// assert_eq!(set.last(), Some((1, nonzero(1))));
+    /// set.insert(1);
+    /// assert_eq!(set.last(), Some((1, nonzero(2))));
+    /// set.insert(2);
+    /// assert_eq!(set.last(), Some((2, nonzero(1))));
+    /// ```
+    #[inline]
+    #[must_use = "Only effect is to produce a result"]
+    pub fn last(&self) -> Option<(T, NonZeroUsize)> {
+        self.value_to_multiplicity
+            .last_key_value()
+            .map(|(&k, &v)| (k, v))
+    }
+
+    /// Remove the smallest element from the multiset.
+    ///
+    /// See also [`pop_all_first()`](Self::pop_all_first) if you want to remove
+    /// all occurences of the smallest value from the multiset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let mut set = NumericalMultiset::new();
+    /// set.insert(1);
+    /// set.insert(1);
+    /// set.insert(2);
+    ///
+    /// assert_eq!(set.pop_first(), Some(1));
+    /// assert_eq!(set.pop_first(), Some(1));
+    /// assert_eq!(set.pop_first(), Some(2));
+    /// assert_eq!(set.pop_first(), None);
+    /// ```
+    #[inline]
+    #[must_use = "Invalid removal should be handled"]
+    pub fn pop_first(&mut self) -> Option<T> {
+        let mut occupied = self.value_to_multiplicity.first_entry()?;
+        let old_multiplicity = *occupied.get();
+        let value = *occupied.key();
+        match NonZeroUsize::new(old_multiplicity.get() - 1) {
+            Some(new_multiplicity) => {
+                *occupied.get_mut() = new_multiplicity;
+            }
+            None => {
+                occupied.remove_entry();
+            }
+        }
+        self.len -= 1;
+        Some(value)
+    }
+
+    /// Remove the largest element from the multiset.
+    ///
+    /// See also [`pop_all_last()`](Self::pop_all_last) if you want to remove
+    /// all occurences of the smallest value from the multiset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let mut set = NumericalMultiset::new();
+    /// set.insert(1);
+    /// set.insert(1);
+    /// set.insert(2);
+    ///
+    /// assert_eq!(set.pop_last(), Some(2));
+    /// assert_eq!(set.pop_last(), Some(1));
+    /// assert_eq!(set.pop_last(), Some(1));
+    /// assert_eq!(set.pop_last(), None);
+    /// ```
+    #[inline]
+    #[must_use = "Invalid removal should be handled"]
+    pub fn pop_last(&mut self) -> Option<T> {
+        let mut occupied = self.value_to_multiplicity.last_entry()?;
+        let old_multiplicity = *occupied.get();
+        let value = *occupied.key();
+        match NonZeroUsize::new(old_multiplicity.get() - 1) {
+            Some(new_multiplicity) => {
+                *occupied.get_mut() = new_multiplicity;
+            }
+            None => {
+                occupied.remove_entry();
+            }
+        }
+        self.len -= 1;
+        Some(value)
+    }
+
     /// Retains only the elements specified by the predicate.
     ///
-    /// In other words, remove all values `v` with multiplicity `m` for which
-    /// `f(v, m)` returns `false`. The values are visited in ascending order.
+    /// For efficiency reasons, the filtering callback `f` is not run once per
+    /// element, but once per distinct value present inside of the multiset. It
+    /// is also provided with the number of occurences of that value within the
+    /// multiset, which can be used as a filtering criterion.
+    ///
+    /// In other words, this method removes all values `v` with multiplicity `m`
+    /// for which `f(v, m)` returns `false`. The values are visited in ascending
+    /// order.
     pub fn retain(&mut self, mut f: impl FnMut(T, NonZeroUsize) -> bool) {
         self.value_to_multiplicity.retain(|&k, &mut v| f(k, v));
         self.reset_len();
+    }
+
+    /// Moves all elements from `other` into `self`, leaving `other` empty.
+    pub fn append(&mut self, other: &mut Self) {
+        // Fast path when self is empty
+        if self.is_empty() {
+            std::mem::swap(self, other);
+            return;
+        }
+
+        // Otherwise just insert everything into self. This is the fastest
+        // available approach because...
+        //
+        // - BTreeMap::append() does not have the right semantics, if both self
+        //   and other contain entries associated with a certain value it will
+        //   discard the elements from self instead of adding those from others.
+        // - BTreeMap does not externally expose a mutable iterator that allows
+        //   for both modification of existing entries and insertions of new
+        //   entries, which is what we would need in order to implement this
+        //   loop more efficiently.
+        for (value, multiplicity) in other.iter() {
+            self.insert_multiple(value, multiplicity);
+        }
+        other.clear();
     }
 }
 
