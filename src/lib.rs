@@ -107,7 +107,10 @@ use std::{
 /// ```
 #[derive(Clone, Debug, Default, Eq)]
 pub struct NumericalMultiset<T> {
+    /// Mapping from distinct values to their multiplicities
     value_to_multiplicity: BTreeMap<T, NonZeroUsize>,
+
+    /// Number of elements = sum of all multiplicities
     len: usize,
 }
 //
@@ -138,8 +141,7 @@ impl<T> NumericalMultiset<T> {
     /// ```
     /// use numerical_multiset::NumericalMultiset;
     ///
-    /// let mut v = NumericalMultiset::new();
-    /// v.insert(1);
+    /// let mut v = NumericalMultiset::from_iter([1, 2, 3]);
     /// v.clear();
     /// assert!(v.is_empty());
     /// ```
@@ -153,6 +155,21 @@ impl<T> NumericalMultiset<T> {
     ///
     /// See also [`num_values()`](Self::num_values) for a count of distinct
     /// values, ignoring duplicate elements.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let mut v = NumericalMultiset::new();
+    /// assert_eq!(v.len(), 0);
+    /// v.insert(1);
+    /// assert_eq!(v.len(), 1);
+    /// v.insert(1);
+    /// assert_eq!(v.len(), 2);
+    /// v.insert(2);
+    /// assert_eq!(v.len(), 3);
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn len(&self) -> usize {
         self.len
@@ -162,12 +179,38 @@ impl<T> NumericalMultiset<T> {
     ///
     /// See also [`len()`](Self::len) for a count of multiset elements,
     /// including duplicates of each value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let mut v = NumericalMultiset::new();
+    /// assert_eq!(v.num_values(), 0);
+    /// v.insert(1);
+    /// assert_eq!(v.num_values(), 1);
+    /// v.insert(1);
+    /// assert_eq!(v.num_values(), 1);
+    /// v.insert(2);
+    /// assert_eq!(v.num_values(), 2);
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn num_values(&self) -> usize {
         self.value_to_multiplicity.len()
     }
 
     /// Truth that the multiset contains no elements
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let mut v = NumericalMultiset::new();
+    /// assert!(v.is_empty());
+    /// v.insert(1);
+    /// assert!(!v.is_empty());
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn is_empty(&self) -> bool {
         self.len == 0
@@ -176,9 +219,18 @@ impl<T> NumericalMultiset<T> {
     /// Creates a consuming iterator visiting all the distinct values, in sorted
     /// order. The multiset cannot be used after calling this method.
     ///
-    /// See also [`into_iter()`](IntoIterator::into_iter) for a variation of
-    /// this iterator that additionally tells how many occurences of each value
-    /// were present in the multiset.
+    /// Call [`into_iter()`](IntoIterator::into_iter) for a variation of this
+    /// iterator that additionally tells how many occurences of each value were
+    /// present in the multiset, in the usual `(value, multiplicity)` format.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let set = NumericalMultiset::from_iter([3, 1, 2, 2]);
+    /// assert!(set.into_values().eq([1, 2, 3]));
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn into_values(
         self,
@@ -197,26 +249,56 @@ impl<T> NumericalMultiset<T> {
 }
 
 impl<T: Copy> NumericalMultiset<T> {
-    /// Iterator over all distinct values in the multiset. Output is sorted by
-    /// ascending value.
-    ///
-    /// See also [`iter()`](Self::iter) if you need to know how many occurences
-    /// of each value are present in the multiset.
-    #[must_use = "Only effect is to produce a result"]
-    pub fn values(
-        &self,
-    ) -> impl DoubleEndedIterator<Item = T> + ExactSizeIterator + FusedIterator + Clone {
-        self.value_to_multiplicity.keys().copied()
-    }
-
     /// Iterator over all distinct values in the multiset, along with their
     /// multiplicities. Output is sorted by ascending value.
     ///
     /// See also [`values()`](Self::values) for a more efficient alternative if
     /// you do not need to know how many occurences of each value are present.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let set = NumericalMultiset::from_iter([3, 1, 2, 2]);
+    ///
+    /// let mut iter = set.iter();
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(iter.next(), Some((1, nonzero(1))));
+    /// assert_eq!(iter.next(), Some((2, nonzero(2))));
+    /// assert_eq!(iter.next(), Some((3, nonzero(1))));
+    /// assert_eq!(iter.next(), None);
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn iter(&self) -> Iter<'_, T> {
         self.into_iter()
+    }
+
+    /// Iterator over all distinct values in the multiset. Output is sorted by
+    /// ascending value.
+    ///
+    /// See also [`iter()`](Self::iter) if you need to know how many occurences
+    /// of each value are present in the multiset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let set = NumericalMultiset::from_iter([3, 1, 2, 2]);
+    ///
+    /// let mut iter = set.values();
+    /// assert_eq!(iter.next(), Some(1));
+    /// assert_eq!(iter.next(), Some(2));
+    /// assert_eq!(iter.next(), Some(3));
+    /// assert_eq!(iter.next(), None);
+    /// ```
+    #[must_use = "Only effect is to produce a result"]
+    pub fn values(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = T> + ExactSizeIterator + FusedIterator + Clone {
+        self.value_to_multiplicity.keys().copied()
     }
 }
 
@@ -442,10 +524,7 @@ impl<T: Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::new();
-    /// set.insert(1);
-    /// set.insert(1);
-    /// set.insert(2);
+    /// let mut set = NumericalMultiset::from_iter([1, 1, 2]);
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
     /// assert_eq!(set.pop_all_first(), Some((1, nonzero(2))));
@@ -474,10 +553,7 @@ impl<T: Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::new();
-    /// set.insert(1);
-    /// set.insert(1);
-    /// set.insert(2);
+    /// let mut set = NumericalMultiset::from_iter([1, 1, 2]);
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
     /// assert_eq!(set.pop_all_last(), Some((2, nonzero(1))));
@@ -495,8 +571,26 @@ impl<T: Ord> NumericalMultiset<T> {
     /// Insert an element into the multiset, tell how many identical elements
     /// were already present in the multiset before insertion.
     ///
-    /// See also [`insert_multiple()`](Self::insert_multiple) for a more
-    /// efficient alternative if you need to insert multiple copies of a value.
+    /// See also [`insert_multiple()`](Self::insert_multiple) if you need to
+    /// insert multiple copies of a value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut set = NumericalMultiset::new();
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(set.insert(1), None);
+    /// assert_eq!(set.insert(1), Some(nonzero(1)));
+    /// assert_eq!(set.insert(1), Some(nonzero(2)));
+    /// assert_eq!(set.insert(2), None);
+    ///
+    /// assert_eq!(set.len(), 4);
+    /// assert_eq!(set.num_values(), 2);
+    /// ```
     #[inline]
     pub fn insert(&mut self, value: T) -> Option<NonZeroUsize> {
         self.insert_multiple(value, NonZeroUsize::new(1).unwrap())
@@ -510,6 +604,23 @@ impl<T: Ord> NumericalMultiset<T> {
     ///
     /// See also [`insert()`](Self::insert) for a convenience shortcut in cases
     /// where you only need to insert one copy of a value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut set = NumericalMultiset::new();
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(set.insert_multiple(1, nonzero(2)), None);
+    /// assert_eq!(set.insert_multiple(1, nonzero(3)), Some(nonzero(2)));
+    /// assert_eq!(set.insert_multiple(2, nonzero(2)), None);
+    ///
+    /// assert_eq!(set.len(), 7);
+    /// assert_eq!(set.num_values(), 2);
+    /// ```
     #[inline]
     pub fn insert_multiple(&mut self, value: T, count: NonZeroUsize) -> Option<NonZeroUsize> {
         let result = match self.value_to_multiplicity.entry(value) {
@@ -532,6 +643,23 @@ impl<T: Ord> NumericalMultiset<T> {
     /// Insert multiple copies of a value, replacing all occurences of this
     /// value that were previously present in the multiset. Tell how many
     /// occurences of `value` were previously present in the multiset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut set = NumericalMultiset::new();
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(set.replace_all(1, nonzero(2)), None);
+    /// assert_eq!(set.replace_all(1, nonzero(3)), Some(nonzero(2)));
+    /// assert_eq!(set.replace_all(2, nonzero(2)), None);
+    ///
+    /// assert_eq!(set.len(), 5);
+    /// assert_eq!(set.num_values(), 2);
+    /// ```
     #[inline]
     pub fn replace_all(&mut self, value: T, count: NonZeroUsize) -> Option<NonZeroUsize> {
         let result = match self.value_to_multiplicity.entry(value) {
@@ -553,16 +681,32 @@ impl<T: Ord> NumericalMultiset<T> {
     /// Attempt to remove one element from the multiset, on success tell how
     /// many identical elements were previously present in the multiset.
     ///
-    /// See also [`remove_all()`](Self::remove_all) for a more efficient
-    /// alternative when you want to remove all occurences of a value from the
-    /// multiset.
+    /// See also [`remove_all()`](Self::remove_all) if you want to remove all
+    /// occurences of a value from the multiset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut set = NumericalMultiset::from_iter([1, 1, 2]);
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(set.remove(1), Some(nonzero(2)));
+    /// assert_eq!(set.remove(1), Some(nonzero(1)));
+    /// assert_eq!(set.remove(1), None);
+    /// assert_eq!(set.remove(2), Some(nonzero(1)));
+    /// assert_eq!(set.remove(2), None);
+    /// ```
     #[inline]
     #[must_use = "Invalid removal should be handled"]
     pub fn remove(&mut self, value: T) -> Option<NonZeroUsize> {
-        let result = match self.value_to_multiplicity.entry(value) {
+        match self.value_to_multiplicity.entry(value) {
             Entry::Vacant(_) => None,
             Entry::Occupied(mut o) => {
                 let old_multiplicity = *o.get();
+                self.len -= 1;
                 match NonZeroUsize::new(old_multiplicity.get() - 1) {
                     Some(new_multiplicity) => {
                         *o.get_mut() = new_multiplicity;
@@ -573,16 +717,29 @@ impl<T: Ord> NumericalMultiset<T> {
                 }
                 Some(old_multiplicity)
             }
-        };
-        self.len -= 1;
-        result
+        }
     }
 
     /// Attempt to remove all occurences of a value from the multiset, on
     /// success tell how many elements were removed from the multiset.
     ///
-    /// See also [`remove()`](Self::remove) if you only need to remove one
-    /// element from the multiset.
+    /// See also [`remove()`](Self::remove) if you only want to remove one
+    /// occurence of a value from the multiset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut set = NumericalMultiset::from_iter([1, 1, 2]);
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(set.remove_all(1), Some(nonzero(2)));
+    /// assert_eq!(set.remove_all(1), None);
+    /// assert_eq!(set.remove_all(2), Some(nonzero(1)));
+    /// assert_eq!(set.remove_all(2), None);
+    /// ```
     #[inline]
     #[must_use = "Invalid removal should be handled"]
     pub fn remove_all(&mut self, value: T) -> Option<NonZeroUsize> {
@@ -596,6 +753,26 @@ impl<T: Ord> NumericalMultiset<T> {
     /// This returns a new collection with all elements greater than or equal to
     /// `value`. The multiset on which this method was called will retain all
     /// elements strictly smaller than `value`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut a = NumericalMultiset::from_iter([1, 2, 2, 3, 3, 3, 4]);
+    /// let b = a.split_off(3);
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert!(a.iter().eq([
+    ///     (1, nonzero(1)),
+    ///     (2, nonzero(2)),
+    /// ]));
+    /// assert!(b.iter().eq([
+    ///     (3, nonzero(3)),
+    ///     (4, nonzero(1)),
+    /// ]));
+    /// ```
     pub fn split_off(&mut self, value: T) -> Self {
         let mut result = Self {
             value_to_multiplicity: self.value_to_multiplicity.split_off(&value),
@@ -630,18 +807,12 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::new();
-    /// set.insert(3);
-    /// set.insert(3);
-    /// set.insert(5);
-    /// set.insert(8);
-    /// set.insert(8);
-    ///
+    /// let set = NumericalMultiset::from_iter([3, 3, 5, 8, 8]);
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(
-    ///     set.range(4..).collect::<Vec<_>>(),
-    ///     [(5, nonzero(1)), (8, nonzero(2))]
-    /// );
+    /// assert!(set.range(4..).eq([
+    ///     (5, nonzero(1)),
+    ///     (8, nonzero(2)),
+    /// ]));
     /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn range<R>(
@@ -675,23 +846,14 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut a = NumericalMultiset::new();
-    /// a.insert(1);
-    /// a.insert(1);
-    /// a.insert(2);
-    /// a.insert(2);
-    /// a.insert(3);
-    ///
-    /// let mut b = NumericalMultiset::new();
-    /// b.insert(2);
-    /// b.insert(3);
-    /// b.insert(4);
+    /// let a = NumericalMultiset::from_iter([1, 1, 2, 2, 3]);
+    /// let b = NumericalMultiset::from_iter([2, 3, 4]);
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(
-    ///     a.difference(&b).collect::<Vec<_>>(),
-    ///     [(1, nonzero(2)), (2, nonzero(1))]
-    /// );
+    /// assert!(a.difference(&b).eq([
+    ///     (1, nonzero(2)),
+    ///     (2, nonzero(1)),
+    /// ]));
     /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn difference<'a>(
@@ -771,23 +933,15 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut a = NumericalMultiset::new();
-    /// a.insert(1);
-    /// a.insert(1);
-    /// a.insert(2);
-    /// a.insert(2);
-    /// a.insert(3);
-    ///
-    /// let mut b = NumericalMultiset::new();
-    /// b.insert(2);
-    /// b.insert(3);
-    /// b.insert(4);
+    /// let a = NumericalMultiset::from_iter([1, 1, 2, 2, 3]);
+    /// let b = NumericalMultiset::from_iter([2, 3, 4]);
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(
-    ///     a.symmetric_difference(&b).collect::<Vec<_>>(),
-    ///     [(1, nonzero(2)), (2, nonzero(1)), (4, nonzero(1))]
-    /// );
+    /// assert!(a.symmetric_difference(&b).eq([
+    ///     (1, nonzero(2)),
+    ///     (2, nonzero(1)),
+    ///     (4, nonzero(1)),
+    /// ]));
     /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn symmetric_difference<'a>(
@@ -857,23 +1011,14 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut a = NumericalMultiset::new();
-    /// a.insert(1);
-    /// a.insert(1);
-    /// a.insert(2);
-    /// a.insert(2);
-    /// a.insert(3);
-    ///
-    /// let mut b = NumericalMultiset::new();
-    /// b.insert(2);
-    /// b.insert(3);
-    /// b.insert(4);
+    /// let a = NumericalMultiset::from_iter([1, 1, 2, 2, 3]);
+    /// let b = NumericalMultiset::from_iter([2, 3, 4]);
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(
-    ///     a.intersection(&b).collect::<Vec<_>>(),
-    ///     [(2, nonzero(1)), (3, nonzero(1))]
-    /// );
+    /// assert!(a.intersection(&b).eq([
+    ///     (2, nonzero(1)),
+    ///     (3, nonzero(1)),
+    /// ]));
     /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn intersection<'a>(
@@ -932,23 +1077,16 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut a = NumericalMultiset::new();
-    /// a.insert(1);
-    /// a.insert(1);
-    /// a.insert(2);
-    /// a.insert(2);
-    /// a.insert(3);
-    ///
-    /// let mut b = NumericalMultiset::new();
-    /// b.insert(2);
-    /// b.insert(3);
-    /// b.insert(4);
+    /// let a = NumericalMultiset::from_iter([1, 1, 2, 2, 3]);
+    /// let b = NumericalMultiset::from_iter([2, 3, 4]);
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(
-    ///     a.union(&b).collect::<Vec<_>>(),
-    ///     [(1, nonzero(2)), (2, nonzero(2)), (3, nonzero(1)), (4, nonzero(1))]
-    /// );
+    /// assert!(a.union(&b).eq([
+    ///     (1, nonzero(2)),
+    ///     (2, nonzero(2)),
+    ///     (3, nonzero(1)),
+    ///     (4, nonzero(1)),
+    /// ]));
     /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn union<'a>(
@@ -1116,19 +1254,62 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// Retains only the elements specified by the predicate.
     ///
     /// For efficiency reasons, the filtering callback `f` is not run once per
-    /// element, but once per distinct value present inside of the multiset. It
-    /// is also provided with the number of occurences of that value within the
-    /// multiset, which can be used as a filtering criterion.
+    /// element, but once per distinct value present inside of the multiset.
+    /// However, it is also provided with the number of occurences of that value
+    /// within the multiset, which can be used as a filtering criterion.
     ///
     /// In other words, this method removes all values `v` with multiplicity `m`
     /// for which `f(v, m)` returns `false`. The values are visited in ascending
     /// order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut set = NumericalMultiset::from_iter([1, 1, 2, 3, 4, 4, 5, 5, 5]);
+    /// // Keep even values with an even multiplicity
+    /// // and odd values with an odd multiplicity.
+    /// set.retain(|value, multiplicity| value % 2 == multiplicity.get() % 2);
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert!(set.iter().eq([
+    ///     (3, nonzero(1)),
+    ///     (4, nonzero(2)),
+    ///     (5, nonzero(3)),
+    /// ]));
+    /// ```
     pub fn retain(&mut self, mut f: impl FnMut(T, NonZeroUsize) -> bool) {
         self.value_to_multiplicity.retain(|&k, &mut v| f(k, v));
         self.reset_len();
     }
 
     /// Moves all elements from `other` into `self`, leaving `other` empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut a = NumericalMultiset::from_iter([1, 1, 2, 3]);
+    /// let mut b = NumericalMultiset::from_iter([3, 3, 4, 5]);
+    ///
+    /// a.append(&mut b);
+    ///
+    /// assert_eq!(a.len(), 8);
+    /// assert!(b.is_empty());
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert!(a.iter().eq([
+    ///     (1, nonzero(2)),
+    ///     (2, nonzero(1)),
+    ///     (3, nonzero(3)),
+    ///     (4, nonzero(1)),
+    ///     (5, nonzero(1)),
+    /// ]));
+    /// ```
     pub fn append(&mut self, other: &mut Self) {
         // Fast path when self is empty
         if self.is_empty() {
@@ -1157,6 +1338,19 @@ impl<T: Copy + Ord> BitAnd<&NumericalMultiset<T>> for &NumericalMultiset<T> {
     type Output = NumericalMultiset<T>;
 
     /// Returns the intersection of `self` and `rhs` as a new `NumericalMultiset<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let a = NumericalMultiset::from_iter([1, 1, 2, 2, 3]);
+    /// let b = NumericalMultiset::from_iter([2, 3, 4]);
+    /// assert_eq!(
+    ///     &a & &b,
+    ///     NumericalMultiset::from_iter([2, 3])
+    /// );
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     fn bitand(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.intersection(rhs).collect()
@@ -1167,6 +1361,19 @@ impl<T: Copy + Ord> BitOr<&NumericalMultiset<T>> for &NumericalMultiset<T> {
     type Output = NumericalMultiset<T>;
 
     /// Returns the union of `self` and `rhs` as a new `NumericalMultiset<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let a = NumericalMultiset::from_iter([1, 1, 2, 2, 3]);
+    /// let b = NumericalMultiset::from_iter([2, 3, 4]);
+    /// assert_eq!(
+    ///     &a | &b,
+    ///     NumericalMultiset::from_iter([1, 1, 2, 2, 3, 4])
+    /// );
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     fn bitor(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.union(rhs).collect()
@@ -1177,6 +1384,19 @@ impl<T: Copy + Ord> BitXor<&NumericalMultiset<T>> for &NumericalMultiset<T> {
     type Output = NumericalMultiset<T>;
 
     /// Returns the symmetric difference of `self` and `rhs` as a new `NumericalMultiset<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let a = NumericalMultiset::from_iter([1, 1, 2, 2, 3]);
+    /// let b = NumericalMultiset::from_iter([2, 3, 4]);
+    /// assert_eq!(
+    ///     &a ^ &b,
+    ///     NumericalMultiset::from_iter([1, 1, 2, 4])
+    /// );
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     fn bitxor(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.symmetric_difference(rhs).collect()
@@ -1194,6 +1414,18 @@ impl<T: Ord> Extend<T> for NumericalMultiset<T> {
 impl<T: Ord> Extend<(T, NonZeroUsize)> for NumericalMultiset<T> {
     /// More efficient alternative to [`Extend<T>`] for cases where you know in
     /// advance that you are going to insert several copies of a value
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let mut set = NumericalMultiset::from_iter([1, 2, 3]);
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// set.extend([(3, nonzero(3)), (4, nonzero(2))]);
+    /// assert_eq!(set, NumericalMultiset::from_iter([1, 2, 3, 3, 3, 3, 4, 4]));
+    /// ```
     fn extend<I: IntoIterator<Item = (T, NonZeroUsize)>>(&mut self, iter: I) {
         for (value, count) in iter {
             self.insert_multiple(value, count);
@@ -1213,6 +1445,23 @@ impl<T: Ord> FromIterator<T> for NumericalMultiset<T> {
 impl<T: Ord> FromIterator<(T, NonZeroUsize)> for NumericalMultiset<T> {
     /// More efficient alternative to [`FromIterator<T>`] for cases where you
     /// know in advance that you are going to insert several copies of a value
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert_eq!(
+    ///     NumericalMultiset::from_iter([1, 2, 2, 2, 3, 3]),
+    ///     NumericalMultiset::from_iter([
+    ///         (1, nonzero(1)),
+    ///         (2, nonzero(3)),
+    ///         (3, nonzero(2)),
+    ///     ])
+    /// );
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     fn from_iter<I: IntoIterator<Item = (T, NonZeroUsize)>>(iter: I) -> Self {
         let mut result = Self::new();
@@ -1312,6 +1561,21 @@ impl<T> IntoIterator for NumericalMultiset<T> {
 
     /// Gets an iterator for moving out the `NumericalMultiset`’s contents in
     /// ascending order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    /// use std::num::NonZeroUsize;
+    ///
+    /// let set = NumericalMultiset::from_iter([3, 1, 2, 2]);
+    /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
+    /// assert!(set.into_iter().eq([
+    ///     (1, nonzero(1)),
+    ///     (2, nonzero(2)),
+    ///     (3, nonzero(1))
+    /// ]));
+    /// ```
     fn into_iter(self) -> Self::IntoIter {
         IntoIter(self.value_to_multiplicity.into_iter())
     }
@@ -1414,6 +1678,19 @@ impl<T: Copy + Ord> Sub<&NumericalMultiset<T>> for &NumericalMultiset<T> {
     type Output = NumericalMultiset<T>;
 
     /// Returns the difference of `self` and `rhs` as a new `NumericalMultiset<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use numerical_multiset::NumericalMultiset;
+    ///
+    /// let a = NumericalMultiset::from_iter([1, 1, 2, 2, 3]);
+    /// let b = NumericalMultiset::from_iter([2, 3, 4]);
+    /// assert_eq!(
+    ///     &a - &b,
+    ///     NumericalMultiset::from_iter([1, 1, 2])
+    /// );
+    /// ```
     #[must_use = "Only effect is to produce a result"]
     fn sub(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.difference(rhs).collect()
