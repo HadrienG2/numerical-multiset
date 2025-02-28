@@ -18,17 +18,18 @@ Let's break down the title of this README into more digestible chunks:
 - **Ordered:** Most multiset implementations are based on associative
   containers. In a crates.io survey performed at the time of writing, the most
   popular choice was hash maps, which do not expose any meaningful element
-  ordering: any insertion can change the order of elements that is exposed by
-  iterators, and there is no efficient way to find what is e.g. the smallest
-  element without iterating over all elements. In contrast, this multiset
-  implementation is based on an ordered associative container (a
+  ordering:
+  - Any insertion can change the order of elements that is exposed by iterators.
+  - There is no efficient way to find what is e.g. the smallest element
+  without iterating over all elements.
+  In contrast, this multiset implementation is based on an ordered associative
+  container (a
   [`BTreeMap`](https://doc.rust-lang.org/std/collections/struct.BTreeMap.html)
   at the time of writing). This allows it to efficiently answer order-related
   queries, like in-order iteration over elements or extraction of the
-  minimum/maximum element. There is however a price to pay for these fast
-  ordering queries, which is that the algorithmic complexity of order-unrelated
-  multiset operations like insertions are deletions will scale less well as the
-  number of elements grows.
+  minimum/maximum element. The price to pay for these fast ordering queries is
+  that the algorithmic complexity of order-unrelated multiset operations like
+  insertions are deletions will scale less well as the number of elements grows.
 - **Numbers:** In Rust terms, a general-purpose multiset is typically based on a
   data structure of the form `Map<Element, Collection<OtherElements>>` where
   `Map` is an associative container and `Collection` groups together elements
