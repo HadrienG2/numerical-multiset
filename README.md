@@ -7,7 +7,7 @@
 ![Requires rustc 1.85.0+](https://img.shields.io/badge/rustc-1.85.0+-lightgray.svg)
 
 
-## What is this
+## What is this?
 
 Let's break down the title of this README into more digestible chunks:
 
@@ -47,20 +47,28 @@ Let's break down the title of this README into more digestible chunks:
       at. Storing a collection of identical values like a general-purpose
       multiset does is thus pointless in our case, instead we can simply count
       the number of occurences of each value, leading to a more efficient sparse
-      histogram data structure of the form `Map<Value, NonZeroUsize>`.
+      histogram data structure of the form `Map<Element, NonZeroUsize>`.
     * Machine numbers all implement the `Copy` trait, which means that we do not
       need the complexity of the standard library's associative container APIs
       (with reference accessors and nontrivial use of the `Borrow` trait) and
       can instead provide simpler and slightly more efficient value-based APIs.
 
-The intended application domain of this crate is windowed signal processing
-algorithms where you are receiving an stream of numbers, and for each new input
-beyond the first few ones you want to answer a question about the last N numbers
-that you received that would naively require partially or fully sorting them.
+
+# How is this useful?
+
+This crate was initially written while implementing windowed signal processing
+algorithms where one is receiving an stream of numbers, and for each new input
+beyond the first few ones, one needs to answer a question about the last N
+numbers that were received, such that the naive algorithm to answer the question
+involves maintaining a sorted list of previous data points.
 
 For example, a median filter can be efficiently implemented by maintaining two
-`NumericalMultiset`, one representing numbers below the current median and one
-representing numbers above the current median.
+`NumericalMultiset`s, one representing numbers below the current median and one
+representing numbers above the current median. This is effectively just a sparse
+variation of the classic dense histogramming algorithm that is commonly used
+when processing 8-bit grayscale images, but sadly does not scale to
+higher-resolution input data (>= 32-bit) due to excessive memory usage and poor
+cache locality.
 
 
 ## License
