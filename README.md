@@ -54,7 +54,7 @@ Let's break down the title of this README into more digestible chunks:
       can instead provide simpler and slightly more efficient value-based APIs.
 
 
-# How is this useful?
+## How is this useful?
 
 This crate was initially written while implementing windowed signal processing
 algorithms where one is receiving an stream of numbers, and for each new input
