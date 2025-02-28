@@ -950,48 +950,50 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     ) -> impl Iterator<Item = (T, NonZeroUsize)> + Clone + 'a {
         let mut iter1 = self.iter().peekable();
         let mut iter2 = other.iter().peekable();
-        std::iter::from_fn(move || 'joint_iter: loop {
-            match (iter1.peek(), iter2.peek()) {
-                // As long as both iterators yield values, must be careful to
-                // yield values from both iterators, in the right order, and to
-                // skip common values.
-                (Some((value1, multiplicity1)), Some((value2, multiplicity2))) => {
-                    match value1.cmp(value2) {
-                        // Return the smallest element, if any, advancing the
-                        // corresponding iterator along the way
-                        Ordering::Less => return iter1.next(),
-                        Ordering::Greater => return iter2.next(),
+        std::iter::from_fn(move || {
+            'joint_iter: loop {
+                match (iter1.peek(), iter2.peek()) {
+                    // As long as both iterators yield values, must be careful to
+                    // yield values from both iterators, in the right order, and to
+                    // skip common values.
+                    (Some((value1, multiplicity1)), Some((value2, multiplicity2))) => {
+                        match value1.cmp(value2) {
+                            // Return the smallest element, if any, advancing the
+                            // corresponding iterator along the way
+                            Ordering::Less => return iter1.next(),
+                            Ordering::Greater => return iter2.next(),
 
-                        // Same value was yielded from both iterators
-                        Ordering::Equal => {
-                            // If the value was yielded with different
-                            // multiplicities, then we must still yield an entry
-                            // with a multiplicity that is the absolute
-                            // difference of these multiplicities.
-                            if multiplicity1 != multiplicity2 {
-                                let value12 = *value1;
-                                let difference_multiplicity = NonZeroUsize::new(
-                                    multiplicity1.get().abs_diff(multiplicity2.get()),
-                                )
-                                .expect("Checked above that this is fine");
-                                let _ = (iter1.next(), iter2.next());
-                                return Some((value12, difference_multiplicity));
-                            } else {
-                                // Otherwise ignore the common value, advance
-                                // both iterators and try again
-                                let _ = (iter1.next(), iter2.next());
-                                continue 'joint_iter;
+                            // Same value was yielded from both iterators
+                            Ordering::Equal => {
+                                // If the value was yielded with different
+                                // multiplicities, then we must still yield an entry
+                                // with a multiplicity that is the absolute
+                                // difference of these multiplicities.
+                                if multiplicity1 != multiplicity2 {
+                                    let value12 = *value1;
+                                    let difference_multiplicity = NonZeroUsize::new(
+                                        multiplicity1.get().abs_diff(multiplicity2.get()),
+                                    )
+                                    .expect("Checked above that this is fine");
+                                    let _ = (iter1.next(), iter2.next());
+                                    return Some((value12, difference_multiplicity));
+                                } else {
+                                    // Otherwise ignore the common value, advance
+                                    // both iterators and try again
+                                    let _ = (iter1.next(), iter2.next());
+                                    continue 'joint_iter;
+                                }
                             }
                         }
                     }
-                }
 
-                // One one iterator ends, we know there's no common value left
-                // and there is no sorted sequence merging business to care
-                // about, so we can just yield the remainder as-is.
-                (Some(_), None) => return iter1.next(),
-                (None, Some(_)) => return iter2.next(),
-                (None, None) => return None,
+                    // One one iterator ends, we know there's no common value left
+                    // and there is no sorted sequence merging business to care
+                    // about, so we can just yield the remainder as-is.
+                    (Some(_), None) => return iter1.next(),
+                    (None, Some(_)) => return iter2.next(),
+                    (None, None) => return None,
+                }
             }
         })
     }
@@ -1027,36 +1029,38 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     ) -> impl Iterator<Item = (T, NonZeroUsize)> + Clone + 'a {
         let mut iter1 = self.iter().peekable();
         let mut iter2 = other.iter().peekable();
-        std::iter::from_fn(move || 'joint_iter: loop {
-            match (iter1.peek(), iter2.peek()) {
-                // As long as both iterators yield elements, must be careful to
-                // yield common elements with merged multiplicities
-                (Some((value1, multiplicity1)), Some((value2, multiplicity2))) => {
-                    match value1.cmp(value2) {
-                        // Advance the iterator which is behind, trying to make
-                        // it reach the same value as the other iterator.
-                        Ordering::Less => {
-                            let _ = iter1.next();
-                            continue 'joint_iter;
-                        }
-                        Ordering::Greater => {
-                            let _ = iter2.next();
-                            continue 'joint_iter;
-                        }
+        std::iter::from_fn(move || {
+            'joint_iter: loop {
+                match (iter1.peek(), iter2.peek()) {
+                    // As long as both iterators yield elements, must be careful to
+                    // yield common elements with merged multiplicities
+                    (Some((value1, multiplicity1)), Some((value2, multiplicity2))) => {
+                        match value1.cmp(value2) {
+                            // Advance the iterator which is behind, trying to make
+                            // it reach the same value as the other iterator.
+                            Ordering::Less => {
+                                let _ = iter1.next();
+                                continue 'joint_iter;
+                            }
+                            Ordering::Greater => {
+                                let _ = iter2.next();
+                                continue 'joint_iter;
+                            }
 
-                        // Merge entries associated with a common value
-                        Ordering::Equal => {
-                            let value12 = *value1;
-                            let multiplicity12 = *multiplicity1.min(multiplicity2);
-                            let _ = (iter1.next(), iter2.next());
-                            return Some((value12, multiplicity12));
+                            // Merge entries associated with a common value
+                            Ordering::Equal => {
+                                let value12 = *value1;
+                                let multiplicity12 = *multiplicity1.min(multiplicity2);
+                                let _ = (iter1.next(), iter2.next());
+                                return Some((value12, multiplicity12));
+                            }
                         }
                     }
-                }
 
-                // One one iterator ends, we know there's no common value
-                // left, so we can just yield nothing.
-                (Some(_), None) | (None, Some(_)) | (None, None) => return None,
+                    // One one iterator ends, we know there's no common value
+                    // left, so we can just yield nothing.
+                    (Some(_), None) | (None, Some(_)) | (None, None) => return None,
+                }
             }
         })
     }
