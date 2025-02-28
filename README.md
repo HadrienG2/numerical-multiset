@@ -19,7 +19,9 @@ Let's break down the title of this README into more digestible chunks:
   containers. In a crates.io survey performed at the time of writing, the most
   popular choice was hash maps, which do not expose any meaningful element
   ordering:
-  - Any insertion can change the order of elements that is exposed by iterators.
+
+  - Any hash map insertion can change the order of elements that is exposed by
+    iterators.
   - There is no efficient way to find what is e.g. the smallest element
   without iterating over all elements.
 
@@ -32,30 +34,30 @@ Let's break down the title of this README into more digestible chunks:
   that the algorithmic complexity of order-unrelated multiset operations like
   insertions are deletions will scale less well as the number of elements grows.
 - **Numbers:** In Rust terms, a general-purpose multiset is typically based on a
-  data structure of the form `Map<Element, Collection<OtherElements>>` where
-  `Map` is an associative container and `Collection` groups together elements
-  that share a common key using something like a `Vec`. However, the multiset
-  provided by this crate is not general-purpose, but instead specialized for
-  machine number types (`u32`, `f32`...) and newtypes thereof. These number
-  types share a few properties that this crate leverages to improve ergonomics,
-  memory usage and execution performance:
+  data structure of the form `Map<Element, Collection<Element>>` where `Map` is
+  an associative container and `Collection` groups together multiset elements
+  that share a common comparison key. However, the multiset provided by this
+  crate is not general-purpose, but specialized for machine number types (`u32`,
+  `f32`...) and newtypes thereof. These number types share a few properties
+  which this crate leverages to improve ergonomics, memory usage and execution
+  performance:
     * The equality operator of machine numbers is defined such that if two
       numbers compare equal, they are the same number, i.e. there is no hidden
       internal information that their `PartialEq` implementation does not look
-      at. This means that storing a collection of identical values like a
-      general-purpose multiset does is pointless in our case, and we can instead 
-      simply count the number of occurences of each value, leading to a more
-      efficient sparse histogram data structure of the form `Map<Value,
-      NonZeroUsize>`.
+      at. Storing a collection of identical values like a general-purpose
+      multiset does is thus pointless in our case, instead we can simply count
+      the number of occurences of each value, leading to a more efficient sparse
+      histogram data structure of the form `Map<Value, NonZeroUsize>`.
     * Machine numbers all implement the `Copy` trait, which means that we do not
-      need the complexity of the standard library's associative containers API
-      (with references and nontrivial use of the `Borrow` trait) and can instead 
-      provide conceptually simpler and slightly more efficient value-based APIs.
+      need the complexity of the standard library's associative container APIs
+      (with reference accessors and nontrivial use of the `Borrow` trait) and
+      can instead provide simpler and slightly more efficient value-based APIs.
 
-You may find this crate useful when implementing windowed signal processing
+The intended application domain of this crate is windowed signal processing
 algorithms where you are receiving an stream of numbers, and for each new input
 beyond the first few ones you want to answer a question about the last N numbers
 that you received that would naively require partially or fully sorting them.
+
 For example, a median filter can be efficiently implemented by maintaining two
 `NumericalMultiset`, one representing numbers below the current median and one
 representing numbers above the current median.
