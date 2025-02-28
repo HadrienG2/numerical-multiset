@@ -25,18 +25,18 @@ Let's break down the title of this README into more digestible chunks:
   [`BTreeMap`](https://doc.rust-lang.org/std/collections/struct.BTreeMap.html)
   at the time of writing). This allows it to efficiently answer order-related
   queries, like in-order iteration over elements or extraction of the
-  minimum/maximum element. There is however a price to pay, which is that the
-  algorithmic complexity of order-unrelated multiset operations like insertions
-  are deletions will scale less well as the number of elements grows.
-- **Numbers:** In Rust terms, a general-purpose ordered multiset is typically
-  based on a data structure of the form `Map<Element,
-  Collection<OtherElements>>` where `Map` is an associative container and
-  `Collection` groups together elements that share a common key using something
-  like a `Vec`. However, the multiset provided by this crate is not
-  general-purpose, but instead specialized for machine number types (`u32`,
-  `f32`...) and newtypes thereof. These number types share a few properties that
-  this crate leverages to improve ergonomics, memory usage and execution
-  performance:
+  minimum/maximum element. There is however a price to pay for these fast
+  ordering queries, which is that the algorithmic complexity of order-unrelated
+  multiset operations like insertions are deletions will scale less well as the
+  number of elements grows.
+- **Numbers:** In Rust terms, a general-purpose multiset is typically based on a
+  data structure of the form `Map<Element, Collection<OtherElements>>` where
+  `Map` is an associative container and `Collection` groups together elements
+  that share a common key using something like a `Vec`. However, the multiset
+  provided by this crate is not general-purpose, but instead specialized for
+  machine number types (`u32`, `f32`...) and newtypes thereof. These number
+  types share a few properties that this crate leverages to improve ergonomics,
+  memory usage and execution performance:
     * The equality operator of machine numbers is defined such that if two
       numbers compare equal, they are the same number, i.e. there is no hidden
       internal information that their `PartialEq` implementation does not look
@@ -52,9 +52,9 @@ Let's break down the title of this README into more digestible chunks:
 
 You may find this crate useful when implementing windowed signal processing
 algorithms where you are receiving an stream of numbers, and for each new input
-beyond the first one you want to answer a question about the last N numbers that
-you received that would normally require partially or fully sorting them. For
-example, a median filter can be efficiently implemented by maintaining two
+beyond the first few ones you want to answer a question about the last N numbers
+that you received that would naively require partially or fully sorting them.
+For example, a median filter can be efficiently implemented by maintaining two
 `NumericalMultiset`, one representing numbers below the current median and one
 representing numbers above the current median.
 
