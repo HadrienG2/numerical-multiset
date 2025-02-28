@@ -22,6 +22,7 @@ Let's break down the title of this README into more digestible chunks:
   - Any insertion can change the order of elements that is exposed by iterators.
   - There is no efficient way to find what is e.g. the smallest element
   without iterating over all elements.
+
   In contrast, this multiset implementation is based on an ordered associative
   container (a
   [`BTreeMap`](https://doc.rust-lang.org/std/collections/struct.BTreeMap.html)
