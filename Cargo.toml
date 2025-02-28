@@ -6,7 +6,7 @@ edition = "2024"
 rust-version = "1.85"
 description = "An ordered multiset of machine numbers"
 repository = "https://github.com/HadrienG2/numerical-multiset"
-license = "MPLv2"
+license = "MPL-2.0"
 keywords = ["numbers", "multiset", "ordered", "sparse", "histogram"]
 categories = ["algorithms", "data-structures", "mathematics", "science"]
 
