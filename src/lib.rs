@@ -124,7 +124,8 @@ impl<T> NumericalMultiset<T> {
     /// ```
     /// use numerical_multiset::NumericalMultiset;
     ///
-    /// let mut set: NumericalMultiset<i32> = NumericalMultiset::new();
+    /// let set = NumericalMultiset::<i32>::new();
+    /// assert!(set.is_empty());
     /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn new() -> Self {
@@ -1699,4 +1700,344 @@ impl<T: Copy + Ord> Sub<&NumericalMultiset<T>> for &NumericalMultiset<T> {
     fn sub(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.difference(rhs).collect()
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use proptest::prelude::*;
+    use std::{cmp::Ordering, fmt::Debug};
+
+    fn check_equal_iterable<V, It1, It2>(it1: It1, it2: It2)
+    where
+        It1: IntoIterator<Item = V>,
+        It2: IntoIterator<Item = V>,
+        V: Debug + PartialEq,
+    {
+        assert_eq!(
+            it1.into_iter().collect::<Vec<_>>(),
+            it2.into_iter().collect::<Vec<_>>(),
+        );
+    }
+
+    fn check_empty_iterable<It>(it: It)
+    where
+        It: IntoIterator,
+        It::Item: Debug + PartialEq,
+    {
+        check_equal_iterable(it, std::iter::empty());
+    }
+
+    fn check_any_set_pair(set1: &NumericalMultiset<i32>, set2: &NumericalMultiset<i32>) {
+        let intersection = set1 & set2;
+        for (val, mul) in &intersection {
+            assert_eq!(
+                mul,
+                set1.multiplicity(val)
+                    .unwrap()
+                    .min(set2.multiplicity(val).unwrap()),
+            );
+        }
+        for val1 in set1.values() {
+            assert!(intersection.contains(val1) || !set2.contains(val1));
+        }
+        for val2 in set2.values() {
+            assert!(intersection.contains(val2) || !set1.contains(val2));
+        }
+        check_equal_iterable(set1.intersection(set2), &intersection);
+
+        let union = set1 | set2;
+        for (val, mul) in &union {
+            assert_eq!(
+                mul.get(),
+                set1.multiplicity(val)
+                    .map_or(0, |nz| nz.get())
+                    .max(set2.multiplicity(val).map_or(0, |nz| nz.get()))
+            );
+        }
+        for val in set1.values().chain(set2.values()) {
+            assert!(union.contains(val));
+        }
+        check_equal_iterable(set1.union(set2), &union);
+
+        let difference = set1 - set2;
+        for (val, mul) in &difference {
+            assert_eq!(
+                mul.get(),
+                set1.multiplicity(val)
+                    .unwrap()
+                    .get()
+                    .checked_sub(set2.multiplicity(val).map_or(0, |nz| nz.get()))
+                    .unwrap()
+            );
+        }
+        for (val, mul1) in set1 {
+            assert!(difference.contains(val) || set2.multiplicity(val).unwrap() >= mul1);
+        }
+        check_equal_iterable(set1.difference(set2), difference);
+
+        let symmetric_difference = set1 ^ set2;
+        for (val, mul) in &symmetric_difference {
+            assert_eq!(
+                mul.get(),
+                set1.multiplicity(val)
+                    .map_or(0, |nz| nz.get())
+                    .abs_diff(set2.multiplicity(val).map_or(0, |nz| nz.get()))
+            );
+        }
+        for (val1, mul1) in set1 {
+            assert!(
+                symmetric_difference.contains(val1) || set2.multiplicity(val1).unwrap() >= mul1
+            );
+        }
+        for (val2, mul2) in set2 {
+            assert!(
+                symmetric_difference.contains(val2) || set1.multiplicity(val2).unwrap() >= mul2
+            );
+        }
+        check_equal_iterable(set1.symmetric_difference(set2), symmetric_difference);
+
+        assert_eq!(set1.is_disjoint(set2), intersection.is_empty(),);
+
+        if set1.is_subset(set2) {
+            for (val, mul1) in set1 {
+                assert!(set2.multiplicity(val).unwrap() >= mul1);
+            }
+        } else {
+            assert!(
+                set1.iter()
+                    .any(|(val1, mul1)| { set2.multiplicity(val1).is_none_or(|mul2| mul2 < mul1) })
+            )
+        }
+        assert_eq!(set1.is_subset(set2), set2.is_superset(set1));
+
+        let mut combined = set1.clone();
+        let mut appended = set2.clone();
+        combined.append(&mut appended);
+        assert_eq!(
+            combined,
+            set1.iter()
+                .chain(set2.iter())
+                .collect::<NumericalMultiset<_>>()
+        );
+        assert!(appended.is_empty());
+
+        let mut extended_by_tuples = set1.clone();
+        extended_by_tuples.extend(set2.iter());
+        assert_eq!(extended_by_tuples, combined);
+
+        let mut extended_by_values = set1.clone();
+        extended_by_values.extend(
+            set2.iter()
+                .flat_map(|(val, mul)| std::iter::repeat_n(val, mul.get())),
+        );
+        assert_eq!(
+            extended_by_values, combined,
+            "{set1:?} + {set2:?} != {extended_by_values:?}"
+        );
+    }
+
+    fn check_any_set(set: &NumericalMultiset<i32>, contents: &[i32]) {
+        let mut contents_histogram = BTreeMap::<i32, usize>::new();
+        for &value in contents {
+            *contents_histogram.entry(value).or_default() += 1;
+        }
+
+        check_equal_iterable(
+            set.iter().map(|(val, mul)| (val, mul.get())),
+            contents_histogram.iter().map(|(&k, &v)| (k, v)),
+        );
+        check_equal_iterable(set, set.iter());
+        check_equal_iterable(set.clone(), set.iter());
+        check_equal_iterable(set.range(..), set.iter());
+        check_equal_iterable(set.values(), contents_histogram.keys().copied());
+        check_equal_iterable(set.clone().into_values(), set.values());
+
+        assert_eq!(set.len(), contents.len());
+        assert_eq!(set.num_values(), contents_histogram.len());
+        assert_eq!(set.is_empty(), contents.is_empty());
+
+        for (&val, &mul) in &contents_histogram {
+            assert!(set.contains(val));
+            assert_eq!(set.multiplicity(val).unwrap().get(), mul);
+        }
+
+        assert_eq!(
+            set.first().map(|(val, mul)| (val, mul.get())),
+            contents_histogram.first_key_value().map(|(&k, &v)| (k, v)),
+        );
+        assert_eq!(
+            set.last().map(|(val, mul)| (val, mul.get())),
+            contents_histogram.last_key_value().map(|(&k, &v)| (k, v)),
+        );
+
+        #[allow(clippy::eq_op)]
+        {
+            assert_eq!(set, set);
+        }
+        assert_eq!(*set, set.clone());
+        assert_eq!(set.cmp(set), Ordering::Equal);
+
+        let mut mutable = set.clone();
+        if let Some((first, first_mul)) = set.first() {
+            // Pop all first elements...
+            assert_eq!(mutable.pop_all_first(), Some((first, first_mul)));
+            assert_eq!(mutable.len(), set.len() - first_mul.get());
+            assert_eq!(mutable.num_values(), set.num_values() - 1);
+            assert!(!mutable.contains(first));
+            assert_eq!(mutable.multiplicity(first), None);
+            assert_ne!(mutable, *set);
+
+            // ...then insert them back
+            assert_eq!(mutable.insert_multiple(first, first_mul), None);
+            assert_eq!(mutable, *set);
+
+            // Same with a single element
+            assert_eq!(mutable.pop_first(), Some(first));
+            assert_eq!(mutable.len(), set.len() - 1);
+            let new_first_mul = NonZeroUsize::new(first_mul.get() - 1);
+            let first_is_single = new_first_mul.is_none();
+            assert_eq!(mutable.num_values(), set.len() - first_is_single as usize);
+            assert_eq!(mutable.contains(first), !first_is_single);
+            assert_eq!(mutable.multiplicity(first), new_first_mul);
+            assert_ne!(mutable, *set);
+            assert_eq!(mutable.insert(first), new_first_mul);
+            assert_eq!(mutable, *set);
+
+            // If there is a first element, there is a last element
+            let (last, last_mul) = set.last().unwrap();
+
+            // And everything we checked for the first element should also
+            // applies to the last element
+            assert_eq!(mutable.pop_all_last(), Some((last, last_mul)));
+            assert_eq!(mutable.len(), set.len() - last_mul.get());
+            assert_eq!(mutable.num_values(), set.num_values() - 1);
+            assert!(!mutable.contains(last));
+            assert_eq!(mutable.multiplicity(last), None);
+            assert_ne!(mutable, *set);
+            //
+            assert_eq!(mutable.insert_multiple(last, last_mul), None);
+            assert_eq!(mutable, *set);
+            //
+            assert_eq!(mutable.pop_last(), Some(last));
+            assert_eq!(mutable.len(), set.len() - 1);
+            let new_last_mul = NonZeroUsize::new(last_mul.get() - 1);
+            let last_is_single = new_last_mul.is_none();
+            assert_eq!(mutable.num_values(), set.len() - last_is_single as usize);
+            assert_eq!(mutable.contains(last), !last_is_single);
+            assert_eq!(mutable.multiplicity(last), new_last_mul);
+            assert_ne!(mutable, *set);
+            assert_eq!(mutable.insert(last), new_last_mul);
+            assert_eq!(mutable, *set);
+        } else {
+            assert!(set.is_empty());
+            assert_eq!(mutable.pop_first(), None);
+            assert!(mutable.is_empty());
+            assert_eq!(mutable.pop_all_first(), None);
+            assert!(mutable.is_empty());
+            assert_eq!(mutable.pop_last(), None);
+            assert!(mutable.is_empty());
+            assert_eq!(mutable.pop_all_last(), None);
+            assert!(mutable.is_empty());
+        }
+
+        let mut retain_all = set.clone();
+        retain_all.retain(|_, _| true);
+        assert_eq!(retain_all, *set);
+
+        let mut retain_nothing = set.clone();
+        retain_nothing.retain(|_, _| false);
+        assert!(retain_nothing.is_empty());
+    }
+
+    fn check_empty_set(empty: &NumericalMultiset<i32>) {
+        check_any_set(empty, &[]);
+
+        assert_eq!(empty.len(), 0);
+        assert_eq!(empty.num_values(), 0);
+        assert!(empty.is_empty());
+        assert_eq!(empty.first(), None);
+        assert_eq!(empty.last(), None);
+
+        check_empty_iterable(empty.iter());
+        check_empty_iterable(empty.values());
+        check_empty_iterable(empty.clone());
+        check_empty_iterable(empty.clone().into_values());
+
+        let mut mutable = empty.clone();
+        assert_eq!(mutable.pop_first(), None);
+        assert_eq!(mutable.pop_last(), None);
+        assert_eq!(mutable.pop_all_first(), None);
+        assert_eq!(mutable.pop_all_last(), None);
+    }
+
+    fn check_clear_outcome(mut set: NumericalMultiset<i32>) {
+        set.clear();
+        check_empty_set(&set);
+    }
+
+    #[test]
+    fn empty() {
+        check_empty_set(&NumericalMultiset::default());
+        let set = NumericalMultiset::<i32>::new();
+        check_empty_set(&set);
+        check_clear_outcome(set);
+    }
+
+    proptest! {
+        #[test]
+        fn single(contents in any::<Vec<i32>>()) {
+            let set = contents.iter().copied().collect();
+            check_any_set(&set, &contents);
+            check_any_set_pair(&set, &set);
+            let empty = NumericalMultiset::default();
+            check_any_set_pair(&set, &empty);
+            check_any_set_pair(&empty, &set);
+        }
+    }
+
+    fn set() -> impl Strategy<Value = NumericalMultiset<i32>> {
+        any::<Vec<i32>>().prop_map(|v| v.into_iter().collect())
+    }
+
+    proptest! {
+        #[test]
+        fn pair(set1 in set(), set2 in set()) {
+            check_any_set_pair(&set1, &set2);
+        }
+    }
+
+    fn set_and_value() -> impl Strategy<Value = (NumericalMultiset<i32>, i32)> {
+        set().prop_flat_map(|set| {
+            if set.is_empty() {
+                (Just(set), any::<i32>()).boxed()
+            } else {
+                let inner_value = prop::sample::select(set.values().collect::<Vec<_>>());
+                let value = prop_oneof![inner_value, any::<i32>(),];
+                (Just(set), value).boxed()
+            }
+        })
+    }
+
+    proptest! {
+        #[test]
+        fn with_value((mut set, value) in set_and_value()) {
+            if let Some(&mul) = set.value_to_multiplicity.get(&value) {
+                assert!(set.contains(value));
+                assert_eq!(set.multiplicity(value), Some(mul));
+                // TODO: Test insert, remove, remove_all, split_off
+            } else {
+                assert!(!set.contains(value));
+                assert_eq!(set.multiplicity(value), None);
+                // TODO: Test insert, remove, remove_all, split_off
+            }
+        }
+
+        // TODO: Another test with a multiplicity to check
+        //       insert_multiple and replace_all.
+    }
+
+    // TODO: Test range with a pair of values
+    // TODO: Test retain with a value and multiplicity threshold
+    // TODO: Check that all operations that change a set change len correctly
 }

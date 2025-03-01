@@ -11,3 +11,6 @@ keywords = ["numbers", "multiset", "ordered", "sparse", "histogram"]
 categories = ["algorithms", "data-structures", "mathematics", "science"]
 
 [dependencies]
+
+[dev-dependencies]
+proptest = { version = "1.6.0", default-features = false, features = ["std"] }
