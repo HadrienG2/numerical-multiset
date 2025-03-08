@@ -1,51 +1,34 @@
-//! An ordered multiset implementation for primitive number types based on
-//! sparse histograms.
+//! This crate implements an ordered multiset of machine
+//! numbers.
 //!
-//! This crate implements a kind of multiset, which is a generalization of the
-//! notion of mathematical set where multiple elements that are equal to each
-//! other can be present simulatneously.
+//! Well, that sentence is quite a mouthful. Let's break it down into
+//! more digestible chunks:
 //!
-//! Our multiset implementation differs from popular multiset implementations of
-//! crates.io at the time of its release in the following respects:
+//! - **Multiset:** The [`NumericalMultiset`] container provided by this crate
+//!   implements a generalization of the mathematical set, the multiset.
+//!   Unlike a set, a multiset can conceptually hold multiple copies of a value.
+//!   This is done by tracking how many occurences of each value are present.
+//! - **Ordered:** Multiset implementations are usually based on associative
+//!   containers, using distinct multiset elements as keys and integer occurence
+//!   counts as values. A popular choice is hash maps, which do not provide any
+//!   meaningful key ordering:
 //!
-//! - It is ordered, which means that order-based queries such as getting a
-//!   sorted list of elements or finding the minimum and maximum elements are
-//!   relatively cheap. For example, the complexity of a min/max query grows
-//!   logarithmically with the number of distinct values in the multiset.
-//!     * The price to pay for this ordering is that classic set operations like
-//!       inserting/removing elements or querying whether an element is present
-//!       will scale less well to larger datasets than in the more common
-//!       hash-based multiset implementations: element-wise operations also have
-//!       logarithmic complexity, whereas a hash-based multiset can instead
-//!       achieve a constant-time operation complexity that's independent of the
-//!       collection size.
-//! - It is specialized for primitive number types and `repr(transparent)`
-//!   wrappers thereof, which means that it can leverage the property of these
-//!   numbers to improve ergonomics and compute/memory efficiency:
-//!     * Since all primitive number types are [`Copy`], we do not need to
-//!       bother with references and [`Borrow`](std::borrow::Borrow) trait
-//!       complexity like general-purpose map and set implementations do, and
-//!       can instead provide a simpler value-based API.
-//!     * Since all primitive number types have well-behaved [`Eq`]
-//!       implementations where numbers that compare equal are identical, we do
-//!       not need to track lists of equal entries like many multiset
-//!       implementations do, and can instead use a more efficient sparse
-//!       histogramming approach where we simply count the number of equal
-//!       entries.
+//!   - Any key insertion may change the order of keys that is exposed by
+//!     iterators.
+//!   - There is no way to find e.g. the smallest key without iterating over
+//!     all key.
 //!
-//! One example application of this multiset implementation would be median
-//! filtering of streaming numerical data whose bit width is too large for the
-//! classic dense histogram approach to be applicable, like floats and integers
-//! of width >= 32 bits.
-//!
-//! To use this crate with floating-point data, you will need to use one of the
-//! available [`Ord`] float wrapper that assert absence of NaNs, such as the
-//! [`NotNan`](https://docs.rs/ordered-float/latest/ordered_float/struct.NotNan.html)
-//! type from the [`ordered_float`](https://docs.rs/ordered-float) crate. We do
-//! not handle this concern for you because checking for NaN has a cost and we
-//! believe this cost is best paid once on your side and hopefully amortized
-//! across many reuses of the resulting wrapper, rather than repeatedly paid
-//! every time an element is inserted into a [`NumericalMultiset`].
+//!   In contrast, [`NumericalMultiset`] is based on an ordered associative
+//!   container. This allows it to efficiently answer order-related queries,
+//!   like in-order iteration over elements or extraction of the minimum/maximum
+//!   element. The price to pay is that order-insenstive multiset operations,
+//!   like item insertions and removals, will scale a little less well to
+//!   larger sets than in a hash-based implementation.
+//! - **Numbers:** The multiset provided by this crate is not general-purpose,
+//!   but specialized for machine number types (`u32`, `f32`...) and newtypes
+//!   thereof. These types are all `Copy`, which lets us provide a simplified
+//!   value-based API, that may also result in slightly improved runtime
+//!   performance in some scenarios.
 
 use std::{
     cmp::Ordering,
@@ -56,8 +39,7 @@ use std::{
     ops::{BitAnd, BitOr, BitXor, RangeBounds, Sub},
 };
 
-/// An ordered multiset implementation for primitive number types based on
-/// sparse histograms.
+/// An ordered multiset of machine numbers.
 ///
 /// You can learn more about the design rationale and overall capabilities of
 /// this data structure in the [crate-level documentation](index.html).
@@ -67,14 +49,39 @@ use std::{
 /// also apply to it. In particular, it is a logic error to modify the order of
 /// values stored inside of the multiset using internal mutability tricks.
 ///
-/// In all the following documentation, we will use the following terminology:
+/// # Floating-point data
 ///
-/// - "values" refers to a unique value as defined by equality of the
-///   [`Eq`] implementation of type `T`
-/// - "elements" refers to possibly duplicate occurences of a value within the
+/// To build multisets of floating-point numbers, you will need to handle the
+/// fact that NaN is unordered. This can be done using one of the [`Ord`] float
+/// wrappers available on crates.io, which work by either [asserting absence of
+/// NaNs](https://docs.rs/ordered-float/latest/ordered_float/struct.NotNan.html)
+/// or [making NaNs
+/// ordered](https://docs.rs/ordered-float/latest/ordered_float/struct.OrderedFloat.html).
+///
+/// For optimal `NumericalMultiset` performance, we advise...
+///
+/// - Preferring
+///   [`NotNan`](https://docs.rs/ordered-float/latest/ordered_float/struct.NotNan.html)-like
+///   wrappers, whose `Ord` implementation can leverage fast hardware
+///   comparisons instead of implementing other ordering semantics in software.
+/// - Using them right from the point where your application receives inputs, to
+///   avoid repeatedly checking your inputs for NaNs by having to rebuild such
+///   wrappers every time a number is inserted into a `NumericalMultiset`.
+///
+/// # Terminology
+///
+/// Because multisets can hold multiple occurences of a value, it is useful to
+/// have concise wording to distinguish between unique values and (possibly
+/// duplicate) occurences of these values.
+///
+/// Throughout this documentation, we will use the following terminology:
+///
+/// - "values" refers to distinct values of type `T` as defined by equality of
+///   the [`Eq`] implementation of type `T`
+/// - "items" refers to possibly duplicate occurences of a value within the
 ///   multiset.
 /// - "multiplicity" refers to the number of occurences of a value within the
-///   multiset, i.e. the number of elements that are equal to this value.
+///   multiset, i.e. the number of items that are equal to this value.
 ///
 /// # Examples
 ///
@@ -85,22 +92,23 @@ use std::{
 /// // Create a multiset
 /// let mut set = NumericalMultiset::new();
 ///
-/// // Inserting elements that do not exist yet is handled much like a standard
-/// // library set type, except we return an Option instead of a boolean...
+/// // Inserting items is handled much like a standard library set type,
+/// // except we return an Option<NonZeroUsize> instead of a boolean.
 /// assert!(set.insert(123).is_none());
 /// assert!(set.insert(456).is_none());
 ///
-/// // ...which allows us to report the number of pre-existing elements, if any
+/// // This allows us to report the number of pre-existing items
+/// // that have the same value, if any.
 /// assert_eq!(set.insert(123), NonZeroUsize::new(1));
 ///
-/// // It is possible to query the minimal and maximal elements cheaply, along
+/// // It is possible to query the minimal and maximal values cheaply, along
 /// // with their multiplicity within the multiset.
 /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
 /// assert_eq!(set.first(), Some((123, nonzero(2))));
 /// assert_eq!(set.last(), Some((456, nonzero(1))));
 ///
-/// // ...and it is more generally possible to iterate over elements in order,
-/// // from the smallest to the largest:
+/// // ...and it is more generally possible to iterate over values and
+/// // multiplicities in order, from the smallest value to the largest one:
 /// for (elem, multiplicity) in &set {
 ///     println!("{elem} with multiplicity {multiplicity}");
 /// }
@@ -110,7 +118,7 @@ pub struct NumericalMultiset<T> {
     /// Mapping from distinct values to their multiplicities
     value_to_multiplicity: BTreeMap<T, NonZeroUsize>,
 
-    /// Number of elements = sum of all multiplicities
+    /// Number of items = sum of all multiplicities
     len: usize,
 }
 //
@@ -135,7 +143,7 @@ impl<T> NumericalMultiset<T> {
         }
     }
 
-    /// Clears the multiset, removing all elements.
+    /// Clears the multiset, removing all items.
     ///
     /// # Examples
     ///
@@ -151,11 +159,11 @@ impl<T> NumericalMultiset<T> {
         self.len = 0;
     }
 
-    /// Number of elements currently present in the multiset, including
-    /// duplicate occurences of a value.
+    /// Number of items currently present in the multiset, including
+    /// duplicate occurences of the same value.
     ///
     /// See also [`num_values()`](Self::num_values) for a count of distinct
-    /// values, ignoring duplicate elements.
+    /// values, ignoring duplicates.
     ///
     /// # Examples
     ///
@@ -178,8 +186,8 @@ impl<T> NumericalMultiset<T> {
 
     /// Number of distinct values currently present in the multiset
     ///
-    /// See also [`len()`](Self::len) for a count of multiset elements,
-    /// including duplicates of each value.
+    /// See also [`len()`](Self::len) for a count of multiset items,
+    /// including duplicate occurences of the same value.
     ///
     /// # Examples
     ///
@@ -200,7 +208,7 @@ impl<T> NumericalMultiset<T> {
         self.value_to_multiplicity.len()
     }
 
-    /// Truth that the multiset contains no elements
+    /// Truth that the multiset contains no items
     ///
     /// # Examples
     ///
@@ -217,12 +225,16 @@ impl<T> NumericalMultiset<T> {
         self.len == 0
     }
 
-    /// Creates a consuming iterator visiting all the distinct values, in sorted
-    /// order. The multiset cannot be used after calling this method.
+    /// Creates a consuming iterator visiting all distinct values in the
+    /// multiset, i.e. the mathematical support of the multiset.
     ///
-    /// Call [`into_iter()`](IntoIterator::into_iter) for a variation of this
-    /// iterator that additionally tells how many occurences of each value were
-    /// present in the multiset, in the usual `(value, multiplicity)` format.
+    /// Values are emitted in ascending order, and the multiset cannot be used
+    /// after calling this method.
+    ///
+    /// Call `into_iter()` (from the [`IntoIterator`] trait) to get a variation
+    /// of this iterator that additionally tells you how many occurences of each
+    /// value were present in the multiset, in the usual `(value, multiplicity)`
+    /// format.
     ///
     /// # Examples
     ///
@@ -239,11 +251,11 @@ impl<T> NumericalMultiset<T> {
         self.value_to_multiplicity.into_keys()
     }
 
-    /// Update `self.len` to match `self.value_to_multiplicity` contents
+    /// Update `self.len` to match `self.value_to_multiplicity`'s contents
     ///
     /// This expensive `O(N)` operation should only be performed after calling
-    /// `BTreeMap` operations that do not provide the right hooks to update the
-    /// length field more efficiently.
+    /// into `BTreeMap` operations that do not provide the right hooks to update
+    /// the length field more efficiently.
     fn reset_len(&mut self) {
         self.len = self.value_to_multiplicity.values().map(|x| x.get()).sum();
     }
@@ -251,7 +263,9 @@ impl<T> NumericalMultiset<T> {
 
 impl<T: Copy> NumericalMultiset<T> {
     /// Iterator over all distinct values in the multiset, along with their
-    /// multiplicities. Output is sorted by ascending value.
+    /// multiplicities.
+    ///
+    /// Values are emitted in ascending order.
     ///
     /// See also [`values()`](Self::values) for a more efficient alternative if
     /// you do not need to know how many occurences of each value are present.
@@ -276,8 +290,10 @@ impl<T: Copy> NumericalMultiset<T> {
         self.into_iter()
     }
 
-    /// Iterator over all distinct values in the multiset. Output is sorted by
-    /// ascending value.
+    /// Iterator over all distinct values in the multiset, i.e. the mathematical
+    /// support of the multiset.
+    ///
+    /// Values are emitted in ascending order.
     ///
     /// See also [`iter()`](Self::iter) if you need to know how many occurences
     /// of each value are present in the multiset.
@@ -331,7 +347,7 @@ impl<T: Ord> NumericalMultiset<T> {
     /// `None` if this value is not present.
     ///
     /// See also [`contains()`](Self::contains) for a more efficient alternative
-    /// if you only need to know whether at least one occurence of value is
+    /// if you only need to know whether at least one occurence of `value` is
     /// present inside of the multiset.
     ///
     /// # Examples
@@ -353,7 +369,7 @@ impl<T: Ord> NumericalMultiset<T> {
         self.value_to_multiplicity.get(&value).copied()
     }
 
-    /// Returns `true` if `self` has no elements in common with `other`. This is
+    /// Returns `true` if `self` has no items in common with `other`. This is
     /// logically equivalent to checking for an empty intersection, but may be
     /// more efficient.
     ///
@@ -398,15 +414,15 @@ impl<T: Ord> NumericalMultiset<T> {
                     }
                 }
 
-                // Once one iterator ends, we know there's no common element
+                // Once one iterator ends, we know there is no common value
                 // left, so we can conclude that the multisets are disjoint.
                 (Some(_), None) | (None, Some(_)) | (None, None) => return true,
             }
         }
     }
 
-    /// Returns `true` if the set is a subset of another, i.e., `other` contains
-    /// at least all the elements in `self`.
+    /// Returns `true` if this multiset is a subset of another, i.e., `other`
+    /// contains at least all the items in `self`.
     ///
     /// In a multiset context, this means that if `self` contains N occurences
     /// of a certain value, then `other` must contain at least N occurences of
@@ -479,8 +495,8 @@ impl<T: Ord> NumericalMultiset<T> {
         true
     }
 
-    /// Returns `true` if the set is a superset of another, i.e., `self`
-    /// contains at least all the elements in `other`.
+    /// Returns `true` if this multiset is a superset of another, i.e., `self`
+    /// contains at least all the items in `other`.
     ///
     /// In a multiset context, this means that if `other` contains N occurences
     /// of a certain value, then `self` must contain at least N occurences of
@@ -569,11 +585,11 @@ impl<T: Ord> NumericalMultiset<T> {
             .inspect(|(_value, count)| self.len -= count.get())
     }
 
-    /// Insert an element into the multiset, tell how many identical elements
-    /// were already present in the multiset before insertion.
+    /// Insert an item into the multiset, tell how many identical items were
+    /// already present in the multiset before insertion.
     ///
-    /// See also [`insert_multiple()`](Self::insert_multiple) if you need to
-    /// insert multiple copies of a value.
+    /// See also [`insert_multiple()`](Self::insert_multiple) for a more
+    /// efficient alternative if you need to insert multiple copies of a value.
     ///
     /// # Examples
     ///
@@ -597,11 +613,11 @@ impl<T: Ord> NumericalMultiset<T> {
         self.insert_multiple(value, NonZeroUsize::new(1).unwrap())
     }
 
-    /// Insert multiple copies of a value, tell how many identical elements were
+    /// Insert multiple copies of an item, tell how many identical items were
     /// already present in the multiset.
     ///
-    /// This method is typically used when transferring all copies of a value
-    /// from one multiset to another.
+    /// This method is typically used for the purpose of efficiently
+    /// transferring all copies of a value from one multiset to another.
     ///
     /// See also [`insert()`](Self::insert) for a convenience shortcut in cases
     /// where you only need to insert one copy of a value.
@@ -643,7 +659,7 @@ impl<T: Ord> NumericalMultiset<T> {
 
     /// Insert multiple copies of a value, replacing all occurences of this
     /// value that were previously present in the multiset. Tell how many
-    /// occurences of `value` were previously present in the multiset.
+    /// occurences of the value were previously present in the multiset.
     ///
     /// # Examples
     ///
@@ -679,8 +695,9 @@ impl<T: Ord> NumericalMultiset<T> {
         result
     }
 
-    /// Attempt to remove one element from the multiset, on success tell how
-    /// many identical elements were previously present in the multiset.
+    /// Attempt to remove one item from the multiset, on success tell how many
+    /// identical items were previously present in the multiset (including the
+    /// one that was just removed).
     ///
     /// See also [`remove_all()`](Self::remove_all) if you want to remove all
     /// occurences of a value from the multiset.
@@ -722,7 +739,7 @@ impl<T: Ord> NumericalMultiset<T> {
     }
 
     /// Attempt to remove all occurences of a value from the multiset, on
-    /// success tell how many elements were removed from the multiset.
+    /// success tell how many items were removed from the multiset.
     ///
     /// See also [`remove()`](Self::remove) if you only want to remove one
     /// occurence of a value from the multiset.
@@ -751,9 +768,9 @@ impl<T: Ord> NumericalMultiset<T> {
 
     /// Splits the collection into two at the specified `value`.
     ///
-    /// This returns a new collection with all elements greater than or equal to
-    /// `value`. The multiset on which this method was called will retain all
-    /// elements strictly smaller than `value`.
+    /// This returns a new multiset containing all items greater than or equal
+    /// to `value`. The multiset on which this method was called will retain all
+    /// items strictly smaller than `value`.
     ///
     /// # Examples
     ///
@@ -828,11 +845,11 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
             .map(|(&k, &v)| (k, v))
     }
 
-    /// Visits the elements representing the difference, i.e., those that are in
+    /// Visits the items representing the difference, i.e., those that are in
     /// `self` but not in `other`. They are sorted in ascending value order and
     /// emitted in the usual deduplicated `(value, multiplicity)` format.
     ///
-    /// The difference is computed element-wise, not value-wise, so if both
+    /// The difference is computed item-wise, not value-wise, so if both
     /// `self` and `other` contain occurences of a certain value `v` with
     /// respective multiplicities `s` and `o`, then...
     ///
@@ -906,19 +923,19 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
                         }
                     },
 
-                    // Other iterator has ended, can yield all remaining values
+                    // Other iterator has ended, can yield all remaining items
                     None => return Some((value, multiplicity)),
                 }
             }
         })
     }
 
-    /// Visits the elements representing the symmetric difference, i.e., those
+    /// Visits the items representing the symmetric difference, i.e., those
     /// that are in `self` or in `other` but not in both. They are sorted in
     /// ascending value order and emitted in the usual deduplicated `(value,
     /// multiplicity)` format.
     ///
-    /// The symmetric difference is computed element-wise, not value-wise, so if
+    /// The symmetric difference is computed item-wise, not value-wise, so if
     /// both `self` and `other` contain occurences of a certain value `v` with
     /// respective multiplicities `s` and `o`, then...
     ///
@@ -959,17 +976,17 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
                     // skip common values.
                     (Some((value1, multiplicity1)), Some((value2, multiplicity2))) => {
                         match value1.cmp(value2) {
-                            // Return the smallest element, if any, advancing the
+                            // Yield the smallest value, if any, advancing the
                             // corresponding iterator along the way
                             Ordering::Less => return iter1.next(),
                             Ordering::Greater => return iter2.next(),
 
-                            // Same value was yielded from both iterators
+                            // Same value was yielded by both iterators
                             Ordering::Equal => {
                                 // If the value was yielded with different
-                                // multiplicities, then we must still yield an entry
-                                // with a multiplicity that is the absolute
-                                // difference of these multiplicities.
+                                // multiplicities, then we must still yield an
+                                // entry with a multiplicity that is the
+                                // absolute difference of these multiplicities.
                                 if multiplicity1 != multiplicity2 {
                                     let value12 = *value1;
                                     let difference_multiplicity = NonZeroUsize::new(
@@ -979,8 +996,8 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
                                     let _ = (iter1.next(), iter2.next());
                                     return Some((value12, difference_multiplicity));
                                 } else {
-                                    // Otherwise ignore the common value, advance
-                                    // both iterators and try again
+                                    // Otherwise ignore the common value,
+                                    // advance both iterators and try again
                                     let _ = (iter1.next(), iter2.next());
                                     continue 'joint_iter;
                                 }
@@ -988,9 +1005,9 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
                         }
                     }
 
-                    // One one iterator ends, we know there's no common value left
-                    // and there is no sorted sequence merging business to care
-                    // about, so we can just yield the remainder as-is.
+                    // One one iterator ends, we know there's no common value
+                    // left and there is no sorted sequence merging business to
+                    // care about, so we can just yield the remainder as-is.
                     (Some(_), None) => return iter1.next(),
                     (None, Some(_)) => return iter2.next(),
                     (None, None) => return None,
@@ -999,11 +1016,11 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         })
     }
 
-    /// Visits the elements representing the intersection, i.e., those that are
+    /// Visits the items representing the intersection, i.e., those that are
     /// both in `self` and `other`. They are sorted in ascending value order and
     /// emitted in the usual deduplicated `(value, multiplicity)` format.
     ///
-    /// The intersection is computed element-wise, not value-wise, so if both
+    /// The intersection is computed item-wise, not value-wise, so if both
     /// `self` and `other` contain occurences of a certain value `v` with
     /// respective multiplicities `s` and `o`, then the intersection will
     /// contain `s.min(o)` occurences of `v`.
@@ -1033,8 +1050,8 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         std::iter::from_fn(move || {
             'joint_iter: loop {
                 match (iter1.peek(), iter2.peek()) {
-                    // As long as both iterators yield elements, must be careful to
-                    // yield common elements with merged multiplicities
+                    // As long as both iterators yield values, must be careful
+                    // to yield common values with merged multiplicities
                     (Some((value1, multiplicity1)), Some((value2, multiplicity2))) => {
                         match value1.cmp(value2) {
                             // Advance the iterator which is behind, trying to make
@@ -1048,7 +1065,7 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
                                 continue 'joint_iter;
                             }
 
-                            // Merge entries associated with a common value
+                            // Merge items associated with a common value
                             Ordering::Equal => {
                                 let value12 = *value1;
                                 let multiplicity12 = *multiplicity1.min(multiplicity2);
@@ -1066,12 +1083,12 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         })
     }
 
-    /// Visits the elements representing the union, i.e., those that are in
+    /// Visits the items representing the union, i.e., those that are in
     /// either `self` or `other`, without counting values that are present in
     /// both multisets twice. They are sorted in ascending value order and
     /// emitted in the usual deduplicated `(value, multiplicity)` format.
     ///
-    /// The union is computed element-wise, not value-wise, so if both
+    /// The union is computed item-wise, not value-wise, so if both
     /// `self` and `other` contain occurences of a certain value `v` with
     /// respective multiplicities `s` and `o`, then the union will contain
     /// `s.max(o)` occurences of `v`.
@@ -1101,15 +1118,15 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         let mut iter1 = self.iter().peekable();
         let mut iter2 = other.iter().peekable();
         std::iter::from_fn(move || match (iter1.peek(), iter2.peek()) {
-            // As long as both iterators yield elements, must be careful to
-            // yield elements in the right order and merge common multiplicities
+            // As long as both iterators yield values, must be careful to
+            // yield values in the right order and merge common multiplicities
             (Some((value1, multiplicity1)), Some((value2, multiplicity2))) => {
                 match value1.cmp(value2) {
-                    // Yield non-common elements in the right order
+                    // Yield non-common values in the right order
                     Ordering::Less => iter1.next(),
                     Ordering::Greater => iter2.next(),
 
-                    // Merge entries associated with a common value
+                    // Merge items associated with a common value
                     Ordering::Equal => {
                         let value12 = *value1;
                         let multiplicity12 = *multiplicity1.max(multiplicity2);
@@ -1180,7 +1197,7 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
             .map(|(&k, &v)| (k, v))
     }
 
-    /// Remove the smallest element from the multiset.
+    /// Remove the smallest item from the multiset.
     ///
     /// See also [`pop_all_first()`](Self::pop_all_first) if you want to remove
     /// all occurences of the smallest value from the multiset.
@@ -1218,7 +1235,7 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         Some(value)
     }
 
-    /// Remove the largest element from the multiset.
+    /// Remove the largest item from the multiset.
     ///
     /// See also [`pop_all_last()`](Self::pop_all_last) if you want to remove
     /// all occurences of the smallest value from the multiset.
@@ -1256,12 +1273,12 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         Some(value)
     }
 
-    /// Retains only the elements specified by the predicate.
+    /// Retains only the items specified by the predicate.
     ///
     /// For efficiency reasons, the filtering callback `f` is not run once per
-    /// element, but once per distinct value present inside of the multiset.
-    /// However, it is also provided with the number of occurences of that value
-    /// within the multiset, which can be used as a filtering criterion.
+    /// item, but once per distinct value present inside of the multiset.
+    /// However, it is also provided with the multiplicity of that value within
+    /// the multiset, which can be used as a filtering criterion.
     ///
     /// In other words, this method removes all values `v` with multiplicity `m`
     /// for which `f(v, m)` returns `false`. The values are visited in ascending
@@ -1290,7 +1307,7 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         self.reset_len();
     }
 
-    /// Moves all elements from `other` into `self`, leaving `other` empty.
+    /// Moves all items from `other` into `self`, leaving `other` empty.
     ///
     /// # Examples
     ///
@@ -1327,7 +1344,7 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
         //
         // - BTreeMap::append() does not have the right semantics, if both self
         //   and other contain entries associated with a certain value it will
-        //   discard the elements from self instead of adding those from others.
+        //   discard the entries from self instead of adding those from others.
         // - BTreeMap does not externally expose a mutable iterator that allows
         //   for both modification of existing entries and insertions of new
         //   entries, which is what we would need in order to implement this
@@ -1491,7 +1508,7 @@ impl<'a, T: Copy> IntoIterator for &'a NumericalMultiset<T> {
     }
 }
 //
-/// An iterator over the entries of an [`NumericalMultiset`], sorted by value.
+/// An iterator over the contents of an [`NumericalMultiset`], sorted by value.
 ///
 /// This `struct` is created by the [`iter()`](NumericalMultiset::iter) method on
 /// [`NumericalMultiset`]. See its documentation for more.
@@ -1564,8 +1581,10 @@ impl<T> IntoIterator for NumericalMultiset<T> {
     type Item = (T, NonZeroUsize);
     type IntoIter = IntoIter<T>;
 
-    /// Gets an iterator for moving out the `NumericalMultiset`’s contents in
-    /// ascending order.
+    /// Gets an iterator for moving out the `NumericalMultiset`’s contents.
+    ///
+    /// Items are grouped by value and emitted in `(value, multiplicity)`
+    /// format, in ascending value order.
     ///
     /// # Examples
     ///
@@ -1586,12 +1605,11 @@ impl<T> IntoIterator for NumericalMultiset<T> {
     }
 }
 //
-/// An owning iterator over the entries of an [`NumericalMultiset`], sorted by
+/// An owning iterator over the contents of an [`NumericalMultiset`], sorted by
 /// value.
 ///
-/// This struct is created by the [`into_iter`](IntoIterator::into_iter) method
-/// on [`NumericalMultiset`] (provided by the [`IntoIterator`] trait). See its
-/// documentation for more.
+/// This struct is created by the `into_iter()` method on [`NumericalMultiset`]
+/// (provided by the [`IntoIterator`] trait). See its documentation for more.
 #[derive(Debug, Default)]
 pub struct IntoIter<T>(btree_map::IntoIter<T, NonZeroUsize>);
 //
@@ -1804,10 +1822,9 @@ mod test {
                 assert!(set2.multiplicity(val).unwrap() >= mul1);
             }
         } else {
-            assert!(
-                set1.iter()
-                    .any(|(val1, mul1)| { set2.multiplicity(val1).is_none_or(|mul2| mul2 < mul1) })
-            )
+            assert!(set1
+                .iter()
+                .any(|(val1, mul1)| { set2.multiplicity(val1).is_none_or(|mul2| mul2 < mul1) }))
         }
         assert_eq!(set1.is_subset(set2), set2.is_superset(set1));
 
@@ -1880,7 +1897,7 @@ mod test {
 
         let mut mutable = set.clone();
         if let Some((first, first_mul)) = set.first() {
-            // Pop all first elements...
+            // Pop the smallest items...
             assert_eq!(mutable.pop_all_first(), Some((first, first_mul)));
             assert_eq!(mutable.len(), set.len() - first_mul.get());
             assert_eq!(mutable.num_values(), set.num_values() - 1);
@@ -1892,7 +1909,7 @@ mod test {
             assert_eq!(mutable.insert_multiple(first, first_mul), None);
             assert_eq!(mutable, *set);
 
-            // Same with a single element
+            // Same with a single item
             assert_eq!(mutable.pop_first(), Some(first));
             assert_eq!(mutable.len(), set.len() - 1);
             let new_first_mul = NonZeroUsize::new(first_mul.get() - 1);
@@ -1904,11 +1921,11 @@ mod test {
             assert_eq!(mutable.insert(first), new_first_mul);
             assert_eq!(mutable, *set);
 
-            // If there is a first element, there is a last element
+            // If there is a first item, there is a last item
             let (last, last_mul) = set.last().unwrap();
 
-            // And everything we checked for the first element should also
-            // applies to the last element
+            // And everything we checked for the smallest items should also
+            // applies to the largest ones
             assert_eq!(mutable.pop_all_last(), Some((last, last_mul)));
             assert_eq!(mutable.len(), set.len() - last_mul.get());
             assert_eq!(mutable.num_values(), set.num_values() - 1);
