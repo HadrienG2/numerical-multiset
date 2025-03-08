@@ -23,7 +23,7 @@
 //!   like in-order iteration over elements or extraction of the minimum/maximum
 //!   element. The price to pay is that order-insenstive multiset operations,
 //!   like item insertions and removals, will scale a little less well to
-//!   larger sets than in a hash-based implementation.
+//!   larger sets of distinct values than in a hash-based implementation.
 //! - **Numbers:** The multiset provided by this crate is not general-purpose,
 //!   but specialized for machine number types (`u32`, `f32`...) and newtypes
 //!   thereof. These types are all `Copy`, which lets us provide a simplified
@@ -76,8 +76,8 @@ use std::{
 ///
 /// Throughout this documentation, we will use the following terminology:
 ///
-/// - "values" refers to distinct values of type `T` as defined by equality of
-///   the [`Eq`] implementation of type `T`
+/// - "values" refers to distinct values of type `T` as defined by the [`Eq`]
+///   implementation of `T`.
 /// - "items" refers to possibly duplicate occurences of a value within the
 ///   multiset.
 /// - "multiplicity" refers to the number of occurences of a value within the
@@ -90,26 +90,26 @@ use std::{
 /// use std::num::NonZeroUsize;
 ///
 /// // Create a multiset
-/// let mut set = NumericalMultiset::new();
+/// let mut mset = NumericalMultiset::new();
 ///
 /// // Inserting items is handled much like a standard library set type,
 /// // except we return an Option<NonZeroUsize> instead of a boolean.
-/// assert!(set.insert(123).is_none());
-/// assert!(set.insert(456).is_none());
+/// assert!(mset.insert(123).is_none());
+/// assert!(mset.insert(456).is_none());
 ///
 /// // This allows us to report the number of pre-existing items
 /// // that have the same value, if any.
-/// assert_eq!(set.insert(123), NonZeroUsize::new(1));
+/// assert_eq!(mset.insert(123), NonZeroUsize::new(1));
 ///
 /// // It is possible to query the minimal and maximal values cheaply, along
 /// // with their multiplicity within the multiset.
 /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-/// assert_eq!(set.first(), Some((123, nonzero(2))));
-/// assert_eq!(set.last(), Some((456, nonzero(1))));
+/// assert_eq!(mset.first(), Some((123, nonzero(2))));
+/// assert_eq!(mset.last(), Some((456, nonzero(1))));
 ///
 /// // ...and it is more generally possible to iterate over values and
 /// // multiplicities in order, from the smallest value to the largest one:
-/// for (elem, multiplicity) in &set {
+/// for (elem, multiplicity) in &mset {
 ///     println!("{elem} with multiplicity {multiplicity}");
 /// }
 /// ```
@@ -132,8 +132,8 @@ impl<T> NumericalMultiset<T> {
     /// ```
     /// use numerical_multiset::NumericalMultiset;
     ///
-    /// let set = NumericalMultiset::<i32>::new();
-    /// assert!(set.is_empty());
+    /// let mset = NumericalMultiset::<i32>::new();
+    /// assert!(mset.is_empty());
     /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn new() -> Self {
@@ -241,8 +241,8 @@ impl<T> NumericalMultiset<T> {
     /// ```
     /// use numerical_multiset::NumericalMultiset;
     ///
-    /// let set = NumericalMultiset::from_iter([3, 1, 2, 2]);
-    /// assert!(set.into_values().eq([1, 2, 3]));
+    /// let mset = NumericalMultiset::from_iter([3, 1, 2, 2]);
+    /// assert!(mset.into_values().eq([1, 2, 3]));
     /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn into_values(
@@ -276,9 +276,9 @@ impl<T: Copy> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let set = NumericalMultiset::from_iter([3, 1, 2, 2]);
+    /// let mset = NumericalMultiset::from_iter([3, 1, 2, 2]);
     ///
-    /// let mut iter = set.iter();
+    /// let mut iter = mset.iter();
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
     /// assert_eq!(iter.next(), Some((1, nonzero(1))));
     /// assert_eq!(iter.next(), Some((2, nonzero(2))));
@@ -303,9 +303,9 @@ impl<T: Copy> NumericalMultiset<T> {
     /// ```
     /// use numerical_multiset::NumericalMultiset;
     ///
-    /// let set = NumericalMultiset::from_iter([3, 1, 2, 2]);
+    /// let mset = NumericalMultiset::from_iter([3, 1, 2, 2]);
     ///
-    /// let mut iter = set.values();
+    /// let mut iter = mset.values();
     /// assert_eq!(iter.next(), Some(1));
     /// assert_eq!(iter.next(), Some(2));
     /// assert_eq!(iter.next(), Some(3));
@@ -331,11 +331,11 @@ impl<T: Ord> NumericalMultiset<T> {
     /// ```
     /// use numerical_multiset::NumericalMultiset;
     ///
-    /// let set = NumericalMultiset::from_iter([1, 2, 2]);
+    /// let mset = NumericalMultiset::from_iter([1, 2, 2]);
     ///
-    /// assert_eq!(set.contains(1), true);
-    /// assert_eq!(set.contains(2), true);
-    /// assert_eq!(set.contains(3), false);
+    /// assert_eq!(mset.contains(1), true);
+    /// assert_eq!(mset.contains(2), true);
+    /// assert_eq!(mset.contains(3), false);
     /// ```
     #[inline]
     #[must_use = "Only effect is to produce a result"]
@@ -356,12 +356,12 @@ impl<T: Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let set = NumericalMultiset::from_iter([1, 2, 2]);
+    /// let mset = NumericalMultiset::from_iter([1, 2, 2]);
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(set.multiplicity(1), Some(nonzero(1)));
-    /// assert_eq!(set.multiplicity(2), Some(nonzero(2)));
-    /// assert_eq!(set.multiplicity(3), None);
+    /// assert_eq!(mset.multiplicity(1), Some(nonzero(1)));
+    /// assert_eq!(mset.multiplicity(2), Some(nonzero(2)));
+    /// assert_eq!(mset.multiplicity(3), None);
     /// ```
     #[inline]
     #[must_use = "Only effect is to produce a result"]
@@ -434,15 +434,15 @@ impl<T: Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     ///
     /// let sup = NumericalMultiset::from_iter([1, 2, 2]);
-    /// let mut set = NumericalMultiset::new();
+    /// let mut mset = NumericalMultiset::new();
     ///
-    /// assert!(set.is_subset(&sup));
-    /// set.insert(2);
-    /// assert!(set.is_subset(&sup));
-    /// set.insert(2);
-    /// assert!(set.is_subset(&sup));
-    /// set.insert(2);
-    /// assert!(!set.is_subset(&sup));
+    /// assert!(mset.is_subset(&sup));
+    /// mset.insert(2);
+    /// assert!(mset.is_subset(&sup));
+    /// mset.insert(2);
+    /// assert!(mset.is_subset(&sup));
+    /// mset.insert(2);
+    /// assert!(!mset.is_subset(&sup));
     /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn is_subset(&self, other: &Self) -> bool {
@@ -508,19 +508,19 @@ impl<T: Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     ///
     /// let sub = NumericalMultiset::from_iter([1, 2, 2]);
-    /// let mut set = NumericalMultiset::new();
+    /// let mut mset = NumericalMultiset::new();
     ///
-    /// assert!(!set.is_superset(&sub));
+    /// assert!(!mset.is_superset(&sub));
     ///
-    /// set.insert(3);
-    /// set.insert(1);
-    /// assert!(!set.is_superset(&sub));
+    /// mset.insert(3);
+    /// mset.insert(1);
+    /// assert!(!mset.is_superset(&sub));
     ///
-    /// set.insert(2);
-    /// assert!(!set.is_superset(&sub));
+    /// mset.insert(2);
+    /// assert!(!mset.is_superset(&sub));
     ///
-    /// set.insert(2);
-    /// assert!(set.is_superset(&sub));
+    /// mset.insert(2);
+    /// assert!(mset.is_superset(&sub));
     /// ```
     #[must_use = "Only effect is to produce a result"]
     pub fn is_superset(&self, other: &Self) -> bool {
@@ -541,12 +541,12 @@ impl<T: Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::from_iter([1, 1, 2]);
+    /// let mut mset = NumericalMultiset::from_iter([1, 1, 2]);
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(set.pop_all_first(), Some((1, nonzero(2))));
-    /// assert_eq!(set.pop_all_first(), Some((2, nonzero(1))));
-    /// assert_eq!(set.pop_all_first(), None);
+    /// assert_eq!(mset.pop_all_first(), Some((1, nonzero(2))));
+    /// assert_eq!(mset.pop_all_first(), Some((2, nonzero(1))));
+    /// assert_eq!(mset.pop_all_first(), None);
     /// ```
     #[inline]
     #[must_use = "Invalid removal should be handled"]
@@ -570,12 +570,12 @@ impl<T: Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::from_iter([1, 1, 2]);
+    /// let mut mset = NumericalMultiset::from_iter([1, 1, 2]);
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(set.pop_all_last(), Some((2, nonzero(1))));
-    /// assert_eq!(set.pop_all_last(), Some((1, nonzero(2))));
-    /// assert_eq!(set.pop_all_last(), None);
+    /// assert_eq!(mset.pop_all_last(), Some((2, nonzero(1))));
+    /// assert_eq!(mset.pop_all_last(), Some((1, nonzero(2))));
+    /// assert_eq!(mset.pop_all_last(), None);
     /// ```
     #[inline]
     #[must_use = "Invalid removal should be handled"]
@@ -597,16 +597,16 @@ impl<T: Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::new();
+    /// let mut mset = NumericalMultiset::new();
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(set.insert(1), None);
-    /// assert_eq!(set.insert(1), Some(nonzero(1)));
-    /// assert_eq!(set.insert(1), Some(nonzero(2)));
-    /// assert_eq!(set.insert(2), None);
+    /// assert_eq!(mset.insert(1), None);
+    /// assert_eq!(mset.insert(1), Some(nonzero(1)));
+    /// assert_eq!(mset.insert(1), Some(nonzero(2)));
+    /// assert_eq!(mset.insert(2), None);
     ///
-    /// assert_eq!(set.len(), 4);
-    /// assert_eq!(set.num_values(), 2);
+    /// assert_eq!(mset.len(), 4);
+    /// assert_eq!(mset.num_values(), 2);
     /// ```
     #[inline]
     pub fn insert(&mut self, value: T) -> Option<NonZeroUsize> {
@@ -628,15 +628,15 @@ impl<T: Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::new();
+    /// let mut mset = NumericalMultiset::new();
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(set.insert_multiple(1, nonzero(2)), None);
-    /// assert_eq!(set.insert_multiple(1, nonzero(3)), Some(nonzero(2)));
-    /// assert_eq!(set.insert_multiple(2, nonzero(2)), None);
+    /// assert_eq!(mset.insert_multiple(1, nonzero(2)), None);
+    /// assert_eq!(mset.insert_multiple(1, nonzero(3)), Some(nonzero(2)));
+    /// assert_eq!(mset.insert_multiple(2, nonzero(2)), None);
     ///
-    /// assert_eq!(set.len(), 7);
-    /// assert_eq!(set.num_values(), 2);
+    /// assert_eq!(mset.len(), 7);
+    /// assert_eq!(mset.num_values(), 2);
     /// ```
     #[inline]
     pub fn insert_multiple(&mut self, value: T, count: NonZeroUsize) -> Option<NonZeroUsize> {
@@ -667,15 +667,15 @@ impl<T: Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::new();
+    /// let mut mset = NumericalMultiset::new();
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(set.replace_all(1, nonzero(2)), None);
-    /// assert_eq!(set.replace_all(1, nonzero(3)), Some(nonzero(2)));
-    /// assert_eq!(set.replace_all(2, nonzero(2)), None);
+    /// assert_eq!(mset.replace_all(1, nonzero(2)), None);
+    /// assert_eq!(mset.replace_all(1, nonzero(3)), Some(nonzero(2)));
+    /// assert_eq!(mset.replace_all(2, nonzero(2)), None);
     ///
-    /// assert_eq!(set.len(), 5);
-    /// assert_eq!(set.num_values(), 2);
+    /// assert_eq!(mset.len(), 5);
+    /// assert_eq!(mset.num_values(), 2);
     /// ```
     #[inline]
     pub fn replace_all(&mut self, value: T, count: NonZeroUsize) -> Option<NonZeroUsize> {
@@ -708,14 +708,14 @@ impl<T: Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::from_iter([1, 1, 2]);
+    /// let mut mset = NumericalMultiset::from_iter([1, 1, 2]);
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(set.remove(1), Some(nonzero(2)));
-    /// assert_eq!(set.remove(1), Some(nonzero(1)));
-    /// assert_eq!(set.remove(1), None);
-    /// assert_eq!(set.remove(2), Some(nonzero(1)));
-    /// assert_eq!(set.remove(2), None);
+    /// assert_eq!(mset.remove(1), Some(nonzero(2)));
+    /// assert_eq!(mset.remove(1), Some(nonzero(1)));
+    /// assert_eq!(mset.remove(1), None);
+    /// assert_eq!(mset.remove(2), Some(nonzero(1)));
+    /// assert_eq!(mset.remove(2), None);
     /// ```
     #[inline]
     #[must_use = "Invalid removal should be handled"]
@@ -750,13 +750,13 @@ impl<T: Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::from_iter([1, 1, 2]);
+    /// let mut mset = NumericalMultiset::from_iter([1, 1, 2]);
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(set.remove_all(1), Some(nonzero(2)));
-    /// assert_eq!(set.remove_all(1), None);
-    /// assert_eq!(set.remove_all(2), Some(nonzero(1)));
-    /// assert_eq!(set.remove_all(2), None);
+    /// assert_eq!(mset.remove_all(1), Some(nonzero(2)));
+    /// assert_eq!(mset.remove_all(1), None);
+    /// assert_eq!(mset.remove_all(2), Some(nonzero(1)));
+    /// assert_eq!(mset.remove_all(2), None);
     /// ```
     #[inline]
     #[must_use = "Invalid removal should be handled"]
@@ -816,7 +816,7 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     ///
     /// # Panics
     ///
-    /// Panics if range `start > end`. Panics if range `start == end` and both
+    /// May panic if range `start > end`, or if range `start == end` and both
     /// bounds are `Excluded`.
     ///
     /// # Examples
@@ -825,9 +825,9 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let set = NumericalMultiset::from_iter([3, 3, 5, 8, 8]);
+    /// let mset = NumericalMultiset::from_iter([3, 3, 5, 8, 8]);
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert!(set.range(4..).eq([
+    /// assert!(mset.range(4..).eq([
     ///     (5, nonzero(1)),
     ///     (8, nonzero(2)),
     /// ]));
@@ -1152,15 +1152,15 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::new();
+    /// let mut mset = NumericalMultiset::new();
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(set.first(), None);
-    /// set.insert(2);
-    /// assert_eq!(set.first(), Some((2, nonzero(1))));
-    /// set.insert(2);
-    /// assert_eq!(set.first(), Some((2, nonzero(2))));
-    /// set.insert(1);
-    /// assert_eq!(set.first(), Some((1, nonzero(1))));
+    /// assert_eq!(mset.first(), None);
+    /// mset.insert(2);
+    /// assert_eq!(mset.first(), Some((2, nonzero(1))));
+    /// mset.insert(2);
+    /// assert_eq!(mset.first(), Some((2, nonzero(2))));
+    /// mset.insert(1);
+    /// assert_eq!(mset.first(), Some((1, nonzero(1))));
     /// ```
     #[inline]
     #[must_use = "Only effect is to produce a result"]
@@ -1179,15 +1179,15 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::new();
+    /// let mut mset = NumericalMultiset::new();
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert_eq!(set.last(), None);
-    /// set.insert(1);
-    /// assert_eq!(set.last(), Some((1, nonzero(1))));
-    /// set.insert(1);
-    /// assert_eq!(set.last(), Some((1, nonzero(2))));
-    /// set.insert(2);
-    /// assert_eq!(set.last(), Some((2, nonzero(1))));
+    /// assert_eq!(mset.last(), None);
+    /// mset.insert(1);
+    /// assert_eq!(mset.last(), Some((1, nonzero(1))));
+    /// mset.insert(1);
+    /// assert_eq!(mset.last(), Some((1, nonzero(2))));
+    /// mset.insert(2);
+    /// assert_eq!(mset.last(), Some((2, nonzero(1))));
     /// ```
     #[inline]
     #[must_use = "Only effect is to produce a result"]
@@ -1207,15 +1207,15 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// ```
     /// use numerical_multiset::NumericalMultiset;
     ///
-    /// let mut set = NumericalMultiset::new();
-    /// set.insert(1);
-    /// set.insert(1);
-    /// set.insert(2);
+    /// let mut mset = NumericalMultiset::new();
+    /// mset.insert(1);
+    /// mset.insert(1);
+    /// mset.insert(2);
     ///
-    /// assert_eq!(set.pop_first(), Some(1));
-    /// assert_eq!(set.pop_first(), Some(1));
-    /// assert_eq!(set.pop_first(), Some(2));
-    /// assert_eq!(set.pop_first(), None);
+    /// assert_eq!(mset.pop_first(), Some(1));
+    /// assert_eq!(mset.pop_first(), Some(1));
+    /// assert_eq!(mset.pop_first(), Some(2));
+    /// assert_eq!(mset.pop_first(), None);
     /// ```
     #[inline]
     #[must_use = "Invalid removal should be handled"]
@@ -1245,15 +1245,15 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// ```
     /// use numerical_multiset::NumericalMultiset;
     ///
-    /// let mut set = NumericalMultiset::new();
-    /// set.insert(1);
-    /// set.insert(1);
-    /// set.insert(2);
+    /// let mut mset = NumericalMultiset::new();
+    /// mset.insert(1);
+    /// mset.insert(1);
+    /// mset.insert(2);
     ///
-    /// assert_eq!(set.pop_last(), Some(2));
-    /// assert_eq!(set.pop_last(), Some(1));
-    /// assert_eq!(set.pop_last(), Some(1));
-    /// assert_eq!(set.pop_last(), None);
+    /// assert_eq!(mset.pop_last(), Some(2));
+    /// assert_eq!(mset.pop_last(), Some(1));
+    /// assert_eq!(mset.pop_last(), Some(1));
+    /// assert_eq!(mset.pop_last(), None);
     /// ```
     #[inline]
     #[must_use = "Invalid removal should be handled"]
@@ -1280,9 +1280,14 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// However, it is also provided with the multiplicity of that value within
     /// the multiset, which can be used as a filtering criterion.
     ///
+    /// Furthermore, you get read/write access to the multiplicity, which allows
+    /// you to change it if you desire to do so.
+    ///
     /// In other words, this method removes all values `v` with multiplicity `m`
-    /// for which `f(v, m)` returns `false`. The values are visited in ascending
-    /// order.
+    /// for which `f(v, m)` returns `false`, and allows changing the
+    /// multiplicity for all values where `f` returns `true`.
+    ///
+    /// Values are visited in ascending order.
     ///
     /// # Examples
     ///
@@ -1290,20 +1295,20 @@ impl<T: Copy + Ord> NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::from_iter([1, 1, 2, 3, 4, 4, 5, 5, 5]);
+    /// let mut mset = NumericalMultiset::from_iter([1, 1, 2, 3, 4, 4, 5, 5, 5]);
     /// // Keep even values with an even multiplicity
     /// // and odd values with an odd multiplicity.
-    /// set.retain(|value, multiplicity| value % 2 == multiplicity.get() % 2);
+    /// mset.retain(|value, multiplicity| value % 2 == multiplicity.get() % 2);
     ///
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert!(set.iter().eq([
+    /// assert!(mset.iter().eq([
     ///     (3, nonzero(1)),
     ///     (4, nonzero(2)),
     ///     (5, nonzero(3)),
     /// ]));
     /// ```
-    pub fn retain(&mut self, mut f: impl FnMut(T, NonZeroUsize) -> bool) {
-        self.value_to_multiplicity.retain(|&k, &mut v| f(k, v));
+    pub fn retain(&mut self, mut f: impl FnMut(T, &mut NonZeroUsize) -> bool) {
+        self.value_to_multiplicity.retain(|&k, v| f(k, v));
         self.reset_len();
     }
 
@@ -1443,10 +1448,10 @@ impl<T: Ord> Extend<(T, NonZeroUsize)> for NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let mut set = NumericalMultiset::from_iter([1, 2, 3]);
+    /// let mut mset = NumericalMultiset::from_iter([1, 2, 3]);
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// set.extend([(3, nonzero(3)), (4, nonzero(2))]);
-    /// assert_eq!(set, NumericalMultiset::from_iter([1, 2, 3, 3, 3, 3, 4, 4]));
+    /// mset.extend([(3, nonzero(3)), (4, nonzero(2))]);
+    /// assert_eq!(mset, NumericalMultiset::from_iter([1, 2, 3, 3, 3, 3, 4, 4]));
     /// ```
     fn extend<I: IntoIterator<Item = (T, NonZeroUsize)>>(&mut self, iter: I) {
         for (value, count) in iter {
@@ -1592,9 +1597,9 @@ impl<T> IntoIterator for NumericalMultiset<T> {
     /// use numerical_multiset::NumericalMultiset;
     /// use std::num::NonZeroUsize;
     ///
-    /// let set = NumericalMultiset::from_iter([3, 1, 2, 2]);
+    /// let mset = NumericalMultiset::from_iter([3, 1, 2, 2]);
     /// let nonzero = |x| NonZeroUsize::new(x).unwrap();
-    /// assert!(set.into_iter().eq([
+    /// assert!(mset.into_iter().eq([
     ///     (1, nonzero(1)),
     ///     (2, nonzero(2)),
     ///     (3, nonzero(1))
@@ -1723,9 +1728,19 @@ impl<T: Copy + Ord> Sub<&NumericalMultiset<T>> for &NumericalMultiset<T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use proptest::prelude::*;
-    use std::{cmp::Ordering, fmt::Debug};
+    use proptest::{prelude::*, sample::SizeRange};
+    use std::{
+        cmp::Ordering,
+        collections::HashSet,
+        fmt::Debug,
+        hash::{BuildHasher, RandomState},
+        ops::Range,
+    };
 
+    /// Clearer name for the constant 1 in NonZeroUsize format
+    const ONE: NonZeroUsize = NonZeroUsize::MIN;
+
+    /// Alternative to Iterator::eq that prints a clearer message on failure
     fn check_equal_iterable<V, It1, It2>(it1: It1, it2: It2)
     where
         It1: IntoIterator<Item = V>,
@@ -1738,6 +1753,7 @@ mod test {
         );
     }
 
+    /// Alternative to it.count() == 0 that prints a clearer message on failure
     fn check_empty_iterable<It>(it: It)
     where
         It: IntoIterator,
@@ -1746,208 +1762,237 @@ mod test {
         check_equal_iterable(it, std::iter::empty());
     }
 
-    fn check_any_set_pair(set1: &NumericalMultiset<i32>, set2: &NumericalMultiset<i32>) {
-        let intersection = set1 & set2;
+    /// Check properties that should be true of any pair of multisets
+    fn check_any_mset_pair(mset1: &NumericalMultiset<i32>, mset2: &NumericalMultiset<i32>) {
+        let intersection = mset1 & mset2;
         for (val, mul) in &intersection {
             assert_eq!(
                 mul,
-                set1.multiplicity(val)
+                mset1
+                    .multiplicity(val)
                     .unwrap()
-                    .min(set2.multiplicity(val).unwrap()),
+                    .min(mset2.multiplicity(val).unwrap()),
             );
         }
-        for val1 in set1.values() {
-            assert!(intersection.contains(val1) || !set2.contains(val1));
+        for val1 in mset1.values() {
+            assert!(intersection.contains(val1) || !mset2.contains(val1));
         }
-        for val2 in set2.values() {
-            assert!(intersection.contains(val2) || !set1.contains(val2));
+        for val2 in mset2.values() {
+            assert!(intersection.contains(val2) || !mset1.contains(val2));
         }
-        check_equal_iterable(set1.intersection(set2), &intersection);
+        check_equal_iterable(mset1.intersection(mset2), &intersection);
 
-        let union = set1 | set2;
+        let union = mset1 | mset2;
         for (val, mul) in &union {
             assert_eq!(
                 mul.get(),
-                set1.multiplicity(val)
+                mset1
+                    .multiplicity(val)
                     .map_or(0, |nz| nz.get())
-                    .max(set2.multiplicity(val).map_or(0, |nz| nz.get()))
+                    .max(mset2.multiplicity(val).map_or(0, |nz| nz.get()))
             );
         }
-        for val in set1.values().chain(set2.values()) {
+        for val in mset1.values().chain(mset2.values()) {
             assert!(union.contains(val));
         }
-        check_equal_iterable(set1.union(set2), &union);
+        check_equal_iterable(mset1.union(mset2), &union);
 
-        let difference = set1 - set2;
+        let difference = mset1 - mset2;
         for (val, mul) in &difference {
             assert_eq!(
                 mul.get(),
-                set1.multiplicity(val)
+                mset1
+                    .multiplicity(val)
                     .unwrap()
                     .get()
-                    .checked_sub(set2.multiplicity(val).map_or(0, |nz| nz.get()))
+                    .checked_sub(mset2.multiplicity(val).map_or(0, |nz| nz.get()))
                     .unwrap()
             );
         }
-        for (val, mul1) in set1 {
-            assert!(difference.contains(val) || set2.multiplicity(val).unwrap() >= mul1);
+        for (val, mul1) in mset1 {
+            assert!(difference.contains(val) || mset2.multiplicity(val).unwrap() >= mul1);
         }
-        check_equal_iterable(set1.difference(set2), difference);
+        check_equal_iterable(mset1.difference(mset2), difference);
 
-        let symmetric_difference = set1 ^ set2;
+        let symmetric_difference = mset1 ^ mset2;
         for (val, mul) in &symmetric_difference {
             assert_eq!(
                 mul.get(),
-                set1.multiplicity(val)
+                mset1
+                    .multiplicity(val)
                     .map_or(0, |nz| nz.get())
-                    .abs_diff(set2.multiplicity(val).map_or(0, |nz| nz.get()))
+                    .abs_diff(mset2.multiplicity(val).map_or(0, |nz| nz.get()))
             );
         }
-        for (val1, mul1) in set1 {
+        for (val1, mul1) in mset1 {
             assert!(
-                symmetric_difference.contains(val1) || set2.multiplicity(val1).unwrap() >= mul1
+                symmetric_difference.contains(val1) || mset2.multiplicity(val1).unwrap() >= mul1
             );
         }
-        for (val2, mul2) in set2 {
+        for (val2, mul2) in mset2 {
             assert!(
-                symmetric_difference.contains(val2) || set1.multiplicity(val2).unwrap() >= mul2
+                symmetric_difference.contains(val2) || mset1.multiplicity(val2).unwrap() >= mul2
             );
         }
-        check_equal_iterable(set1.symmetric_difference(set2), symmetric_difference);
+        check_equal_iterable(mset1.symmetric_difference(mset2), symmetric_difference);
 
-        assert_eq!(set1.is_disjoint(set2), intersection.is_empty(),);
+        assert_eq!(mset1.is_disjoint(mset2), intersection.is_empty(),);
 
-        if set1.is_subset(set2) {
-            for (val, mul1) in set1 {
-                assert!(set2.multiplicity(val).unwrap() >= mul1);
+        if mset1.is_subset(mset2) {
+            for (val, mul1) in mset1 {
+                assert!(mset2.multiplicity(val).unwrap() >= mul1);
             }
         } else {
-            assert!(set1
+            assert!(mset1
                 .iter()
-                .any(|(val1, mul1)| { set2.multiplicity(val1).is_none_or(|mul2| mul2 < mul1) }))
+                .any(|(val1, mul1)| { mset2.multiplicity(val1).is_none_or(|mul2| mul2 < mul1) }))
         }
-        assert_eq!(set1.is_subset(set2), set2.is_superset(set1));
+        assert_eq!(mset2.is_superset(mset1), mset1.is_subset(mset2));
 
-        let mut combined = set1.clone();
-        let mut appended = set2.clone();
+        let mut combined = mset1.clone();
+        let mut appended = mset2.clone();
         combined.append(&mut appended);
         assert_eq!(
             combined,
-            set1.iter()
-                .chain(set2.iter())
+            mset1
+                .iter()
+                .chain(mset2.iter())
                 .collect::<NumericalMultiset<_>>()
         );
         assert!(appended.is_empty());
 
-        let mut extended_by_tuples = set1.clone();
-        extended_by_tuples.extend(set2.iter());
+        let mut extended_by_tuples = mset1.clone();
+        extended_by_tuples.extend(mset2.iter());
         assert_eq!(extended_by_tuples, combined);
 
-        let mut extended_by_values = set1.clone();
+        let mut extended_by_values = mset1.clone();
         extended_by_values.extend(
-            set2.iter()
+            mset2
+                .iter()
                 .flat_map(|(val, mul)| std::iter::repeat_n(val, mul.get())),
         );
         assert_eq!(
             extended_by_values, combined,
-            "{set1:?} + {set2:?} != {extended_by_values:?}"
+            "{mset1:?} + {mset2:?} != {extended_by_values:?}"
         );
+
+        assert_eq!(
+            mset1.cmp(mset2),
+            mset1
+                .value_to_multiplicity
+                .cmp(&mset2.value_to_multiplicity)
+        );
+        assert_eq!(mset1.partial_cmp(mset2), Some(mset1.cmp(mset2)));
     }
 
-    fn check_any_set(set: &NumericalMultiset<i32>, contents: &[i32]) {
-        let mut contents_histogram = BTreeMap::<i32, usize>::new();
-        for &value in contents {
-            *contents_histogram.entry(value).or_default() += 1;
-        }
+    /// Check properties that should be true of any multiset, knowing its contents
+    fn check_any_mset(mset: &NumericalMultiset<i32>, contents: &[(i32, NonZeroUsize)]) {
+        let sorted_contents = contents
+            .iter()
+            .map(|(v, m)| (*v, m.get()))
+            .collect::<BTreeMap<i32, usize>>();
 
         check_equal_iterable(
-            set.iter().map(|(val, mul)| (val, mul.get())),
-            contents_histogram.iter().map(|(&k, &v)| (k, v)),
+            mset.iter().map(|(val, mul)| (val, mul.get())),
+            sorted_contents.iter().map(|(&k, &v)| (k, v)),
         );
-        check_equal_iterable(set, set.iter());
-        check_equal_iterable(set.clone(), set.iter());
-        check_equal_iterable(set.range(..), set.iter());
-        check_equal_iterable(set.values(), contents_histogram.keys().copied());
-        check_equal_iterable(set.clone().into_values(), set.values());
+        check_equal_iterable(mset, mset.iter());
+        check_equal_iterable(mset.clone(), mset.iter());
+        check_equal_iterable(mset.range(..), mset.iter());
+        check_equal_iterable(mset.values(), sorted_contents.keys().copied());
+        check_equal_iterable(mset.clone().into_values(), mset.values());
 
-        assert_eq!(set.len(), contents.len());
-        assert_eq!(set.num_values(), contents_histogram.len());
-        assert_eq!(set.is_empty(), contents.is_empty());
+        assert_eq!(mset.len(), sorted_contents.values().sum());
+        assert_eq!(mset.num_values(), contents.len());
+        assert_eq!(mset.is_empty(), contents.is_empty());
 
-        for (&val, &mul) in &contents_histogram {
-            assert!(set.contains(val));
-            assert_eq!(set.multiplicity(val).unwrap().get(), mul);
+        for (&val, &mul) in &sorted_contents {
+            assert!(mset.contains(val));
+            assert_eq!(mset.multiplicity(val).unwrap().get(), mul);
         }
 
         assert_eq!(
-            set.first().map(|(val, mul)| (val, mul.get())),
-            contents_histogram.first_key_value().map(|(&k, &v)| (k, v)),
+            mset.first().map(|(val, mul)| (val, mul.get())),
+            sorted_contents.first_key_value().map(|(&k, &v)| (k, v)),
         );
         assert_eq!(
-            set.last().map(|(val, mul)| (val, mul.get())),
-            contents_histogram.last_key_value().map(|(&k, &v)| (k, v)),
+            mset.last().map(|(val, mul)| (val, mul.get())),
+            sorted_contents.last_key_value().map(|(&k, &v)| (k, v)),
         );
 
         #[allow(clippy::eq_op)]
         {
-            assert_eq!(set, set);
+            assert_eq!(mset, mset);
         }
-        assert_eq!(*set, set.clone());
-        assert_eq!(set.cmp(set), Ordering::Equal);
+        assert_eq!(*mset, mset.clone());
+        assert_eq!(mset.cmp(mset), Ordering::Equal);
+        assert_eq!(mset.partial_cmp(mset), Some(mset.cmp(mset)));
 
-        let mut mutable = set.clone();
-        if let Some((first, first_mul)) = set.first() {
+        let state = RandomState::new();
+        assert_eq!(
+            state.hash_one(mset),
+            state.hash_one(&mset.value_to_multiplicity),
+        );
+
+        let mut mutable = mset.clone();
+        if let Some((first, first_mul)) = mset.first() {
             // Pop the smallest items...
             assert_eq!(mutable.pop_all_first(), Some((first, first_mul)));
-            assert_eq!(mutable.len(), set.len() - first_mul.get());
-            assert_eq!(mutable.num_values(), set.num_values() - 1);
+            assert_eq!(mutable.len(), mset.len() - first_mul.get());
+            assert_eq!(mutable.num_values(), mset.num_values() - 1);
             assert!(!mutable.contains(first));
             assert_eq!(mutable.multiplicity(first), None);
-            assert_ne!(mutable, *set);
+            assert_ne!(mutable, *mset);
 
             // ...then insert them back
             assert_eq!(mutable.insert_multiple(first, first_mul), None);
-            assert_eq!(mutable, *set);
+            assert_eq!(mutable, *mset);
 
             // Same with a single item
             assert_eq!(mutable.pop_first(), Some(first));
-            assert_eq!(mutable.len(), set.len() - 1);
+            assert_eq!(mutable.len(), mset.len() - 1);
             let new_first_mul = NonZeroUsize::new(first_mul.get() - 1);
             let first_is_single = new_first_mul.is_none();
-            assert_eq!(mutable.num_values(), set.len() - first_is_single as usize);
+            assert_eq!(
+                mutable.num_values(),
+                mset.num_values() - first_is_single as usize
+            );
             assert_eq!(mutable.contains(first), !first_is_single);
             assert_eq!(mutable.multiplicity(first), new_first_mul);
-            assert_ne!(mutable, *set);
+            assert_ne!(mutable, *mset);
             assert_eq!(mutable.insert(first), new_first_mul);
-            assert_eq!(mutable, *set);
+            assert_eq!(mutable, *mset);
 
             // If there is a first item, there is a last item
-            let (last, last_mul) = set.last().unwrap();
+            let (last, last_mul) = mset.last().unwrap();
 
             // And everything we checked for the smallest items should also
             // applies to the largest ones
             assert_eq!(mutable.pop_all_last(), Some((last, last_mul)));
-            assert_eq!(mutable.len(), set.len() - last_mul.get());
-            assert_eq!(mutable.num_values(), set.num_values() - 1);
+            assert_eq!(mutable.len(), mset.len() - last_mul.get());
+            assert_eq!(mutable.num_values(), mset.num_values() - 1);
             assert!(!mutable.contains(last));
             assert_eq!(mutable.multiplicity(last), None);
-            assert_ne!(mutable, *set);
+            assert_ne!(mutable, *mset);
             //
             assert_eq!(mutable.insert_multiple(last, last_mul), None);
-            assert_eq!(mutable, *set);
+            assert_eq!(mutable, *mset);
             //
             assert_eq!(mutable.pop_last(), Some(last));
-            assert_eq!(mutable.len(), set.len() - 1);
+            assert_eq!(mutable.len(), mset.len() - 1);
             let new_last_mul = NonZeroUsize::new(last_mul.get() - 1);
             let last_is_single = new_last_mul.is_none();
-            assert_eq!(mutable.num_values(), set.len() - last_is_single as usize);
+            assert_eq!(
+                mutable.num_values(),
+                mset.num_values() - last_is_single as usize
+            );
             assert_eq!(mutable.contains(last), !last_is_single);
             assert_eq!(mutable.multiplicity(last), new_last_mul);
-            assert_ne!(mutable, *set);
+            assert_ne!(mutable, *mset);
             assert_eq!(mutable.insert(last), new_last_mul);
-            assert_eq!(mutable, *set);
+            assert_eq!(mutable, *mset);
         } else {
-            assert!(set.is_empty());
+            assert!(mset.is_empty());
             assert_eq!(mutable.pop_first(), None);
             assert!(mutable.is_empty());
             assert_eq!(mutable.pop_all_first(), None);
@@ -1958,17 +2003,18 @@ mod test {
             assert!(mutable.is_empty());
         }
 
-        let mut retain_all = set.clone();
+        let mut retain_all = mset.clone();
         retain_all.retain(|_, _| true);
-        assert_eq!(retain_all, *set);
+        assert_eq!(retain_all, *mset);
 
-        let mut retain_nothing = set.clone();
+        let mut retain_nothing = mset.clone();
         retain_nothing.retain(|_, _| false);
         assert!(retain_nothing.is_empty());
     }
 
-    fn check_empty_set(empty: &NumericalMultiset<i32>) {
-        check_any_set(empty, &[]);
+    /// Check properties that should be true of an empty multiset
+    fn check_empty_mset(empty: &NumericalMultiset<i32>) {
+        check_any_mset(empty, &[]);
 
         assert_eq!(empty.len(), 0);
         assert_eq!(empty.num_values(), 0);
@@ -1988,73 +2034,314 @@ mod test {
         assert_eq!(mutable.pop_all_last(), None);
     }
 
-    fn check_clear_outcome(mut set: NumericalMultiset<i32>) {
-        set.clear();
-        check_empty_set(&set);
+    /// Check that clear() makes a multiset empty
+    fn check_clear_outcome(mut mset: NumericalMultiset<i32>) {
+        mset.clear();
+        check_empty_mset(&mset);
     }
 
+    /// Check the various ways to build an empty multiset
     #[test]
     fn empty() {
-        check_empty_set(&NumericalMultiset::default());
-        let set = NumericalMultiset::<i32>::new();
-        check_empty_set(&set);
-        check_clear_outcome(set);
+        check_empty_mset(&NumericalMultiset::default());
+        let mset = NumericalMultiset::<i32>::new();
+        check_empty_mset(&mset);
+        check_clear_outcome(mset);
+    }
+
+    /// Maximal acceptable multiplicity value
+    fn max_multiplicity() -> usize {
+        SizeRange::default().end_excl()
+    }
+
+    /// Generate a reasonably low multiplicity value
+    fn multiplicity() -> impl Strategy<Value = NonZeroUsize> {
+        prop_oneof![Just(1), Just(2), 3..max_multiplicity()]
+            .prop_map(|m| NonZeroUsize::new(m).unwrap())
+    }
+
+    /// Build an arbitrary multiset
+    fn mset_contents() -> impl Strategy<Value = Vec<(i32, NonZeroUsize)>> {
+        any::<HashSet<i32>>().prop_flat_map(|values| {
+            prop::collection::vec(multiplicity(), values.len()).prop_map(move |multiplicities| {
+                values.iter().copied().zip(multiplicities).collect()
+            })
+        })
     }
 
     proptest! {
+        /// Check properties of arbitrary multisets
         #[test]
-        fn single(contents in any::<Vec<i32>>()) {
-            let set = contents.iter().copied().collect();
-            check_any_set(&set, &contents);
-            check_any_set_pair(&set, &set);
-            let empty = NumericalMultiset::default();
-            check_any_set_pair(&set, &empty);
-            check_any_set_pair(&empty, &set);
+        fn single(contents in mset_contents()) {
+            for mset in [
+                contents.iter().copied().collect(),
+                contents.iter().flat_map(|(v, m)| {
+                    std::iter::repeat_n(*v, m.get())
+                }).collect(),
+            ] {
+                check_any_mset(&mset, &contents);
+                check_any_mset_pair(&mset, &mset);
+                let empty = NumericalMultiset::default();
+                check_any_mset_pair(&mset, &empty);
+                check_any_mset_pair(&empty, &mset);
+                check_clear_outcome(mset);
+            }
         }
     }
 
-    fn set() -> impl Strategy<Value = NumericalMultiset<i32>> {
-        any::<Vec<i32>>().prop_map(|v| v.into_iter().collect())
+    /// Build an arbitrary multiset
+    fn mset() -> impl Strategy<Value = NumericalMultiset<i32>> {
+        mset_contents().prop_map(NumericalMultiset::from_iter)
     }
 
-    proptest! {
-        #[test]
-        fn pair(set1 in set(), set2 in set()) {
-            check_any_set_pair(&set1, &set2);
-        }
-    }
-
-    fn set_and_value() -> impl Strategy<Value = (NumericalMultiset<i32>, i32)> {
-        set().prop_flat_map(|set| {
-            if set.is_empty() {
-                (Just(set), any::<i32>()).boxed()
+    /// Build a multiset and pick a value that has a high chance of being from
+    /// the multiset if it is not empty.
+    fn mset_and_value() -> impl Strategy<Value = (NumericalMultiset<i32>, i32)> {
+        mset().prop_flat_map(|mset| {
+            if mset.is_empty() {
+                (Just(mset), any::<i32>()).boxed()
             } else {
-                let inner_value = prop::sample::select(set.values().collect::<Vec<_>>());
-                let value = prop_oneof![inner_value, any::<i32>(),];
-                (Just(set), value).boxed()
+                let inner_value = prop::sample::select(mset.values().collect::<Vec<_>>());
+                let value = prop_oneof![inner_value, any::<i32>()];
+                (Just(mset), value).boxed()
+            }
+        })
+    }
+
+    proptest! {
+        /// Test operations that combine a multiset with a value
+        #[test]
+        fn with_value((initial, value) in mset_and_value()) {
+            // Most operations depend on whether the value was present...
+            if let Some(&mul) = initial.value_to_multiplicity.get(&value) {
+                assert!(initial.contains(value));
+                assert_eq!(initial.multiplicity(value), Some(mul));
+                {
+                    let mut mset = initial.clone();
+                    assert_eq!(mset.insert(value), Some(mul));
+                    let mut expected = initial.clone();
+                    let Entry::Occupied(mut entry) = expected.value_to_multiplicity.entry(value) else {
+                        unreachable!();
+                    };
+                    *entry.get_mut() = mul.checked_add(1).unwrap();
+                    expected.len += 1;
+                    assert_eq!(mset, expected);
+                }
+                {
+                    let mut mset = initial.clone();
+                    assert_eq!(mset.remove(value), Some(mul));
+                    let mut expected = initial.clone();
+                    if mul == ONE {
+                        expected.value_to_multiplicity.remove(&value);
+                    } else {
+                        let Entry::Occupied(mut entry) = expected.value_to_multiplicity.entry(value) else {
+                            unreachable!();
+                        };
+                        *entry.get_mut() = NonZeroUsize::new(mul.get() - 1).unwrap();
+                    }
+                    expected.len -= 1;
+                    assert_eq!(mset, expected);
+                }
+                {
+                    let mut mset = initial.clone();
+                    assert_eq!(mset.remove_all(value), Some(mul));
+                    let mut expected = initial.clone();
+                    expected.value_to_multiplicity.remove(&value);
+                    expected.len -= mul.get();
+                    assert_eq!(mset, expected);
+                }
+            } else {
+                assert!(!initial.contains(value));
+                assert_eq!(initial.multiplicity(value), None);
+                {
+                    let mut mset = initial.clone();
+                    assert_eq!(mset.insert(value), None);
+                    let mut expected = initial.clone();
+                    expected.value_to_multiplicity.insert(value, ONE);
+                    expected.len += 1;
+                    assert_eq!(mset, expected);
+                }
+                {
+                    let mut mset = initial.clone();
+                    assert_eq!(mset.remove(value), None);
+                    assert_eq!(mset, initial);
+                    assert_eq!(mset.remove_all(value), None);
+                    assert_eq!(mset, initial);
+                }
+            }
+
+            // ...except for split_off, which doesn't really care
+            {
+                let mut mset = initial.clone();
+                let ge = mset.split_off(value);
+                let lt = mset;
+                let mut expected_lt = initial.clone();
+                let ge_value_to_multiplicity = expected_lt.value_to_multiplicity.split_off(&value);
+                expected_lt.reset_len();
+                assert_eq!(lt, expected_lt);
+                let expected_ge = NumericalMultiset::from_iter(ge_value_to_multiplicity);
+                assert_eq!(ge, expected_ge);
+            }
+        }
+
+        /// Check operations that require a value and a multiplicity
+        #[test]
+        fn with_value_and_multiplicity((initial, value) in mset_and_value(),
+                                       new_mul in multiplicity()) {
+            // Most operations depend on whether the value was present...
+            if let Some(&initial_mul) = initial.value_to_multiplicity.get(&value) {
+                {
+                    let mut mset = initial.clone();
+                    assert_eq!(mset.insert_multiple(value, new_mul), Some(initial_mul));
+                    let mut expected = initial.clone();
+                    let Entry::Occupied(mut entry) = expected.value_to_multiplicity.entry(value) else {
+                        unreachable!();
+                    };
+                    *entry.get_mut() = initial_mul.checked_add(new_mul.get()).unwrap();
+                    expected.len += new_mul.get();
+                    assert_eq!(mset, expected);
+                }
+                {
+                    let mut mset = initial.clone();
+                    assert_eq!(mset.replace_all(value, new_mul), Some(initial_mul));
+                    let mut expected = initial.clone();
+                        let Entry::Occupied(mut entry) = expected.value_to_multiplicity.entry(value) else {
+                            unreachable!();
+                        };
+                        *entry.get_mut() = new_mul;
+                    expected.len = expected.len - initial_mul.get() + new_mul.get();
+                    assert_eq!(mset, expected);
+                }
+            } else {
+                let mut inserted = initial.clone();
+                assert_eq!(inserted.insert_multiple(value, new_mul), None);
+                let mut expected = initial.clone();
+                expected.value_to_multiplicity.insert(value, new_mul);
+                expected.len += new_mul.get();
+                assert_eq!(inserted, expected);
+
+                let mut replaced = initial.clone();
+                assert_eq!(replaced.replace_all(value, new_mul), None);
+                assert_eq!(replaced, expected);
+            }
+
+            // ...but retain doesn't care much
+            {
+                let f = |v, m: &mut NonZeroUsize| {
+                    if v <= value && *m <= new_mul {
+                        *m = m.checked_add(42).unwrap();
+                        true
+                    } else {
+                        false
+                    }
+                };
+                let mut retained = initial.clone();
+                retained.retain(f);
+                let mut expected = initial.clone();
+                expected.value_to_multiplicity.retain(|&v, m| f(v, m));
+                expected.reset_len();
+                assert_eq!(retained, expected);
+            }
+        }
+    }
+
+    /// Build a multiset and pick a range of values that have a high chance of
+    /// being from the multiset if it is not empty, and of being in sorted order
+    fn mset_and_value_range() -> impl Strategy<Value = (NumericalMultiset<i32>, Range<i32>)> {
+        let pair_to_range = |values: [i32; 2]| values[0]..values[1];
+        mset().prop_flat_map(move |mset| {
+            if mset.is_empty() {
+                (Just(mset), any::<[i32; 2]>().prop_map(pair_to_range)).boxed()
+            } else {
+                let inner_value = || prop::sample::select(mset.values().collect::<Vec<_>>());
+                let value = || prop_oneof![3 => inner_value(), 2 => any::<i32>()];
+                let range = [value(), value()].prop_map(pair_to_range);
+                (Just(mset), range).boxed()
             }
         })
     }
 
     proptest! {
         #[test]
-        fn with_value((mut set, value) in set_and_value()) {
-            if let Some(&mul) = set.value_to_multiplicity.get(&value) {
-                assert!(set.contains(value));
-                assert_eq!(set.multiplicity(value), Some(mul));
-                // TODO: Test insert, remove, remove_all, split_off
-            } else {
-                assert!(!set.contains(value));
-                assert_eq!(set.multiplicity(value), None);
-                // TODO: Test insert, remove, remove_all, split_off
+        fn range((mset, range) in mset_and_value_range()) {
+            match std::panic::catch_unwind(|| {
+                mset.range(range.clone()).collect::<Vec<_>>()
+            }) {
+                Ok(output) => check_equal_iterable(output, mset.value_to_multiplicity.range(range).map(|(&v, &m)| (v, m))),
+                Err(_panicked) => assert!(range.start > range.end),
             }
         }
-
-        // TODO: Another test with a multiplicity to check
-        //       insert_multiple and replace_all.
     }
 
-    // TODO: Test range with a pair of values
-    // TODO: Test retain with a value and multiplicity threshold
-    // TODO: Check that all operations that change a set change len correctly
+    /// Build a pair of multisets that have reasonable odds of having some
+    /// simple set relationship with each other.
+    fn mset_pair() -> impl Strategy<Value = (NumericalMultiset<i32>, NumericalMultiset<i32>)> {
+        mset().prop_flat_map(|mset1| {
+            if mset1.is_empty() {
+                (Just(mset1), mset()).boxed()
+            } else {
+                // For related sets, we first extract a subsequence of the
+                // (value, multiplicity) pairs contained inside mset1...
+                let related = prop::sample::subsequence(
+                    mset1.iter().collect::<Vec<_>>(),
+                    0..mset1.num_values(),
+                )
+                .prop_flat_map(move |subseq| {
+                    // ...then, for each retained (value, multiplicity) pairs...
+                    subseq
+                        .into_iter()
+                        .map(|(v, m)| {
+                            let m = m.get();
+                            // ...we pick a multiplicity that has equal chance of being...
+                            // - 1: Common gotcha in tests
+                            // - 2..M: Less than in mset1
+                            // - M: As many as in mset1
+                            // - (M+1)..: More than in mset1
+                            let multiplicity = match m {
+                                1 => prop_oneof![Just(1), 2..max_multiplicity()].boxed(),
+                                2 => prop_oneof![Just(1), Just(2), 3..max_multiplicity()].boxed(),
+                                _ if m + 1 < max_multiplicity() => {
+                                    prop_oneof![Just(1), 2..m, Just(m), (m + 1)..max_multiplicity()]
+                                        .boxed()
+                                }
+                                _ => prop_oneof![Just(1), 2..max_multiplicity()].boxed(),
+                            }
+                            .prop_map(|m| NonZeroUsize::new(m).unwrap());
+                            (Just(v), multiplicity)
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .prop_map(|elems| elems.into_iter().collect());
+
+                // As a result, mset2 convers less values than mset1, so their
+                // roles are asymmetrical. To ensure this bias isn't exposed to
+                // tests, we should randomly flip them.
+                let related_pair = (Just(mset1.clone()), related, any::<bool>()).prop_map(
+                    |(mset1, mset2, flip)| {
+                        if flip {
+                            (mset2, mset1)
+                        } else {
+                            (mset1, mset2)
+                        }
+                    },
+                );
+
+                // Finally, we can and should also sometimes pick unrelated sets
+                // like we do when mset1 is empty
+                prop_oneof![
+                    1 => (Just(mset1), mset()),
+                    4 => related_pair,
+                ]
+                .boxed()
+            }
+        })
+    }
+
+    proptest! {
+        /// Check properties of arbitrary pairs of multisets
+        #[test]
+        fn pair((mset1, mset2) in mset_pair()) {
+            check_any_mset_pair(&mset1, &mset2);
+        }
+    }
 }
