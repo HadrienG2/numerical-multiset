@@ -1829,9 +1829,11 @@ mod test {
                 assert!(mset2.multiplicity(val).unwrap() >= mul1);
             }
         } else {
-            assert!(mset1
-                .iter()
-                .any(|(val1, mul1)| { mset2.multiplicity(val1).is_none_or(|mul2| mul2 < mul1) }))
+            assert!(
+                mset1.iter().any(|(val1, mul1)| {
+                    mset2.multiplicity(val1).is_none_or(|mul2| mul2 < mul1)
+                })
+            )
         }
         assert_eq!(mset2.is_superset(mset1), mset1.is_subset(mset2));
 
@@ -2304,11 +2306,7 @@ mod test {
                 // tests, we should randomly flip them.
                 let related_pair = (Just(mset1.clone()), related, any::<bool>()).prop_map(
                     |(mset1, mset2, flip)| {
-                        if flip {
-                            (mset2, mset1)
-                        } else {
-                            (mset1, mset2)
-                        }
+                        if flip { (mset2, mset1) } else { (mset1, mset2) }
                     },
                 );
 
