@@ -1378,7 +1378,6 @@ impl<T: Copy + Ord> BitAnd<&NumericalMultiset<T>> for &NumericalMultiset<T> {
     ///     NumericalMultiset::from_iter([2, 3])
     /// );
     /// ```
-    #[must_use = "Only effect is to produce a result"]
     fn bitand(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.intersection(rhs).collect()
     }
@@ -1401,7 +1400,6 @@ impl<T: Copy + Ord> BitOr<&NumericalMultiset<T>> for &NumericalMultiset<T> {
     ///     NumericalMultiset::from_iter([1, 1, 2, 2, 3, 4])
     /// );
     /// ```
-    #[must_use = "Only effect is to produce a result"]
     fn bitor(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.union(rhs).collect()
     }
@@ -1424,7 +1422,6 @@ impl<T: Copy + Ord> BitXor<&NumericalMultiset<T>> for &NumericalMultiset<T> {
     ///     NumericalMultiset::from_iter([1, 1, 2, 4])
     /// );
     /// ```
-    #[must_use = "Only effect is to produce a result"]
     fn bitxor(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.symmetric_difference(rhs).collect()
     }
@@ -1461,7 +1458,6 @@ impl<T: Ord> Extend<(T, NonZeroUsize)> for NumericalMultiset<T> {
 }
 
 impl<T: Ord> FromIterator<T> for NumericalMultiset<T> {
-    #[must_use = "Only effect is to produce a result"]
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let mut result = Self::new();
         result.extend(iter);
@@ -1489,7 +1485,6 @@ impl<T: Ord> FromIterator<(T, NonZeroUsize)> for NumericalMultiset<T> {
     ///     ])
     /// );
     /// ```
-    #[must_use = "Only effect is to produce a result"]
     fn from_iter<I: IntoIterator<Item = (T, NonZeroUsize)>>(iter: I) -> Self {
         let mut result = Self::new();
         result.extend(iter);
@@ -1507,7 +1502,6 @@ impl<'a, T: Copy> IntoIterator for &'a NumericalMultiset<T> {
     type Item = (T, NonZeroUsize);
     type IntoIter = Iter<'a, T>;
 
-    #[must_use = "Only effect is to produce a result"]
     fn into_iter(self) -> Self::IntoIter {
         Iter(self.value_to_multiplicity.iter())
     }
@@ -1533,7 +1527,6 @@ impl<T: Copy> DoubleEndedIterator for Iter<'_, T> {
 }
 //
 impl<T: Copy> ExactSizeIterator for Iter<'_, T> {
-    #[must_use = "Only effect is to produce a result"]
     fn len(&self) -> usize {
         self.0.len()
     }
@@ -1549,7 +1542,6 @@ impl<T: Copy> Iterator for Iter<'_, T> {
         self.0.next().map(|(&k, &v)| (k, v))
     }
 
-    #[must_use = "Only effect is to produce a result"]
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.0.size_hint()
     }
@@ -1561,11 +1553,11 @@ impl<T: Copy> Iterator for Iter<'_, T> {
         self.0.count()
     }
 
-    fn last(self) -> Option<Self::Item>
+    fn last(mut self) -> Option<Self::Item>
     where
         Self: Sized,
     {
-        self.0.last().map(|(&k, &v)| (k, v))
+        self.0.next_back().map(|(&k, &v)| (k, v))
     }
 
     #[inline]
@@ -1631,7 +1623,6 @@ impl<T> DoubleEndedIterator for IntoIter<T> {
 }
 //
 impl<T> ExactSizeIterator for IntoIter<T> {
-    #[must_use = "Only effect is to produce a result"]
     fn len(&self) -> usize {
         self.0.len()
     }
@@ -1647,7 +1638,6 @@ impl<T> Iterator for IntoIter<T> {
         self.0.next()
     }
 
-    #[must_use = "Only effect is to produce a result"]
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.0.size_hint()
     }
@@ -1659,11 +1649,11 @@ impl<T> Iterator for IntoIter<T> {
         self.0.count()
     }
 
-    fn last(self) -> Option<Self::Item>
+    fn last(mut self) -> Option<Self::Item>
     where
         Self: Sized,
     {
-        self.0.last()
+        self.0.next_back()
     }
 
     #[inline]
@@ -1681,21 +1671,18 @@ impl<T> Iterator for IntoIter<T> {
 }
 
 impl<T: Ord> Ord for NumericalMultiset<T> {
-    #[must_use = "Only effect is to produce a result"]
     fn cmp(&self, other: &Self) -> Ordering {
         self.value_to_multiplicity.cmp(&other.value_to_multiplicity)
     }
 }
 
 impl<T: PartialEq> PartialEq for NumericalMultiset<T> {
-    #[must_use = "Only effect is to produce a result"]
     fn eq(&self, other: &Self) -> bool {
         self.len == other.len && self.value_to_multiplicity == other.value_to_multiplicity
     }
 }
 
 impl<T: PartialOrd> PartialOrd for NumericalMultiset<T> {
-    #[must_use = "Only effect is to produce a result"]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.value_to_multiplicity
             .partial_cmp(&other.value_to_multiplicity)
@@ -1719,7 +1706,6 @@ impl<T: Copy + Ord> Sub<&NumericalMultiset<T>> for &NumericalMultiset<T> {
     ///     NumericalMultiset::from_iter([1, 1, 2])
     /// );
     /// ```
-    #[must_use = "Only effect is to produce a result"]
     fn sub(self, rhs: &NumericalMultiset<T>) -> Self::Output {
         self.difference(rhs).collect()
     }
@@ -1843,11 +1829,9 @@ mod test {
                 assert!(mset2.multiplicity(val).unwrap() >= mul1);
             }
         } else {
-            assert!(
-                mset1.iter().any(|(val1, mul1)| {
-                    mset2.multiplicity(val1).is_none_or(|mul2| mul2 < mul1)
-                })
-            )
+            assert!(mset1
+                .iter()
+                .any(|(val1, mul1)| { mset2.multiplicity(val1).is_none_or(|mul2| mul2 < mul1) }))
         }
         assert_eq!(mset2.is_superset(mset1), mset1.is_subset(mset2));
 
@@ -2320,7 +2304,11 @@ mod test {
                 // tests, we should randomly flip them.
                 let related_pair = (Just(mset1.clone()), related, any::<bool>()).prop_map(
                     |(mset1, mset2, flip)| {
-                        if flip { (mset2, mset1) } else { (mset1, mset2) }
+                        if flip {
+                            (mset2, mset1)
+                        } else {
+                            (mset1, mset2)
+                        }
                     },
                 );
 
